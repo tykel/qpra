@@ -2,7 +2,9 @@
 #ifndef QPRA_UI_H
 #define QPRA_UI_H
 
+#include <stdint.h>
 #include <SDL2/SDL.h>
+#include <GL/glx.h>
 #ifdef _WIN32
 #else
 #include <gtk/gtk.h>
@@ -19,6 +21,7 @@ struct ui_window
 #else
     GtkWidget *window;
     GtkWidget *area;
+    GLXContext context;
 #endif
 };
 

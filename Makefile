@@ -10,14 +10,14 @@ CORE:=core
 MAIN_SRCS:=main.c
 MAIN_SRCS:=$(addprefix $(SRC)/,$(MAIN_SRCS))
 
-CORE_SRCS:=core.c
-CORE_SRCS_ALL:=$(CORE_SRCS) core.h
+CORE_SRCS:=core.c cpu/cpu.c
+CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h
 
 CORE_SRCS:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS))
 CORE_SRCS_ALL:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS_ALL))
 
-UI_SRCS:=ui.c ui_gtk.c
-UI_SRCS_ALL:=$(UI_SRCS) ui.h ui_gtk.h
+UI_SRCS:=ui.c ui_gtk.c gtk_opengl.c
+UI_SRCS_ALL:=$(UI_SRCS) ui.h ui_gtk.h gtk_opengl.h
 
 UI_SRCS:=$(addprefix $(SRC)/$(UI)/,$(UI_SRCS))
 UI_SRCS_ALL:=$(addprefix $(SRC)/$(UI)/,$(UI_SRCS_ALL))

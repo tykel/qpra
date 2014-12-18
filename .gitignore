@@ -1,0 +1,6 @@
+*.so
+qpra
+tags
+src/*.o
+src/core/*.o
+src/ui/*.o

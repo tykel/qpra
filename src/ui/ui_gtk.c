@@ -2,58 +2,196 @@
 #include <stdio.h>
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
-#include <GL/glx.h>
 #include "ui/ui.h"
 #include "ui/ui_gtk.h"
+#include "ui/gtk_opengl.h"
 
-SDL_Window *swindow;
-SDL_Renderer *renderer;
-SDL_Texture *texture;
 struct ui_window *window;
+
+int done = 0;
+int texname;
 
 void ui_init_gtk(int argc, char **argv)
 {
+    int i, j;
+    
+    /* Initialize SDL. */
+    SDL_Init(SDL_INIT_VIDEO);
+
+    /* Initialize GTK. */
     gtk_init(&argc, &argv);
+
+    /* XXX: Create an initial framebuffer texture. */
+    framebuffer = malloc(256 * 224 * 3);
+    for(j = 0; j < 224; ++j) {
+        for(i = 0; i < 256; ++i) {
+            framebuffer[(j*256 + i) * 3 + 0] = i;
+            framebuffer[(j*256 + i) * 3 + 1] = i;
+            framebuffer[(j*256 + i) * 3 + 2] = i;
+        }
+    }
 }
 
 struct ui_window * ui_window_new_gtk(void)
 {
+    GtkWidget *menubar, *filemenu, *file, *quit;
+    GtkWidget *box;
+    int attributes[] = {
+        GLX_RGBA,
+        GLX_RED_SIZE, 1,
+        GLX_GREEN_SIZE, 1,
+        GLX_BLUE_SIZE, 1,
+        GLX_DOUBLEBUFFER, True,
+        GLX_DEPTH_SIZE, 12,
+        None
+    };
     struct ui_window *window = malloc(sizeof(struct ui_window));
    
     /* Create the GTK+ window. */
     window->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_widget_set_app_paintable(window->window, TRUE);
+    box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_container_add(GTK_CONTAINER(window->window), box);
+    
+    menubar = gtk_menu_bar_new();
+    filemenu = gtk_menu_new();
+    file = gtk_menu_item_new_with_label("File");
+    quit = gtk_menu_item_new_with_label("Quit");
+    
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(file), filemenu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), quit);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menubar), file);
+    
+    window->context = NULL;
+    window->area = gtk_drawing_area_new();
+    window->context = gtk_opengl_create(window->area, attributes,
+            window->context, TRUE);
+    
+    g_object_set_data(G_OBJECT(window->window), "area", window->area);
+    g_object_set_data(G_OBJECT(window->window), "context", window->context);
+    
     gtk_widget_set_size_request(window->window, 512, 448);
     gtk_window_set_resizable (GTK_WINDOW(window->window), FALSE);
-    g_signal_connect(window->window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-    g_timeout_add(16, (GSourceFunc)ui_draw_gtk, window);
-    gtk_widget_show(window->window);
-    window->id = GDK_WINDOW_XID(gtk_widget_get_window(window->window));
-    
-    /* Attach SDL to that window. */
-    SDL_Init(SDL_INIT_VIDEO);
-    swindow = SDL_CreateWindowFrom((void*)window->id);
-    swindow->flags |= SDL_WINDOW_OPENGL;
-    SDL_GL_LoadLibrary(NULL);
 
-    renderer = SDL_CreateRenderer(swindow, -1,
-            SDL_RENDERER_ACCELERATED);
-    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-            SDL_TEXTUREACCESS_STATIC, 512, 448);
+    gtk_box_pack_start(GTK_BOX(box), menubar, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), window->area, TRUE, TRUE, 0);
     
-    SDL_SetWindowTitle(swindow, "QPRA [SDL]");
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    /* Connect events to their callbacks. */
+    g_signal_connect(G_OBJECT(window->window), "destroy",
+            G_CALLBACK(ui_gtk_quit_destroy), NULL);
+    g_signal_connect(G_OBJECT(quit), "activate",
+            G_CALLBACK(ui_gtk_quit), NULL);
+    g_signal_connect(window->area, "configure_event",
+            G_CALLBACK(gtk_area_configure), window->window);
+    g_signal_connect(window->area, "realize",
+            G_CALLBACK(gtk_area_start), window->window); 
     
+    gtk_widget_show_all(window->window);
+
     return window;
 }
 
 void ui_run_gtk(struct ui_window *window)
 {
-    gtk_main();
+    ui_draw_init();
+    
+    while(!done) {
+        SDL_Event event;
+
+        while(gtk_events_pending()) {
+            gtk_main_iteration_do(FALSE);
+        }
+        
+        while(SDL_PollEvent(&event)) {
+            switch(event.type) {
+                case SDL_QUIT:
+                    done = 1;
+                default:
+                    break;
+            }
+        }
+
+        ui_draw_opengl();
+        gtk_opengl_swap(window->area);
+    }
+    
+    SDL_Quit();
+    gtk_opengl_remove(window->area, window->context);
+    gtk_widget_destroy(window->window);
 }
 
-static gboolean ui_draw_gtk(GtkWidget *widget, cairo_t *cr, gpointer ptr)
+static void ui_gtk_quit(void)
 {
-    SDL_RenderClear(renderer);
-    SDL_RenderPresent(renderer);
+    done = 1;
+}
+
+static void ui_gtk_quit_destroy(void)
+{
+    free(framebuffer);
+    free(window);
+    exit(0);
+}
+
+static void ui_draw_init(void)
+{
+    glGenTextures(1, &texname);
+    glBindTexture(GL_TEXTURE_2D, texname);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 224, 0, GL_RGB,
+            GL_UNSIGNED_BYTE, framebuffer);
+    
+    glClearColor(0.0, 0.0, 0.0, 1.0);
+}
+
+static void ui_draw_opengl(void)
+{
+    glClear(GL_COLOR_BUFFER_BIT);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, 512, 0, 448, -1, 1);
+    glEnable(GL_TEXTURE_2D);
+    glBegin(GL_TRIANGLE_STRIP);
+        glTexCoord2f(0.0, 0.0);
+        glVertex2i(0, 448);
+        glTexCoord2f(0.0, 1.0);
+        glVertex2i(512, 448);
+        glTexCoord2f(1.0, 1.0);
+        glVertex2i(0, 0);
+        glTexCoord2f(1.0, 0.0);
+        glVertex2i(512, 0);
+    glEnd();
+}
+
+static int gtk_area_configure(GtkWidget *widget, GdkEventConfigure *event, void *data)
+{
+    GtkWidget *window = (GtkWidget*)data;                                       
+    GtkWidget *area = (GtkWidget*)g_object_get_data(G_OBJECT (window), "area"); 
+    GLXContext context = (GLXContext)g_object_get_data(G_OBJECT (window), "context");
+    GtkAllocation allocation;                                                   
+
+    if (gtk_opengl_current (area, context) == TRUE) {                           
+        gtk_widget_get_allocation (widget, &allocation);                        
+        glViewport (0, 0, allocation.width, allocation.height);                 
+    }                                                                           
+
+    return TRUE;
+}
+
+static int gtk_area_start(GtkWidget *widget, void *data)
+{
+    GtkWidget *window = (GtkWidget *) data;                                     
+    GtkWidget *area = (GtkWidget *) g_object_get_data (G_OBJECT (window), "area");
+    GLXContext context = (GLXContext) g_object_get_data (G_OBJECT (window), "context");
+
+    if (gtk_opengl_current (area, context) == TRUE) {                           
+        glDisable(GL_DEPTH_TEST);                                               
+        glDisable(GL_CULL_FACE);                                                
+        glDisable(GL_DITHER);                                                  
+        glShadeModel(GL_SMOOTH);                                               
+    }                                                                           
+
+    return TRUE;
 }
