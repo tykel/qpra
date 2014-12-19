@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O0 -g -I./src
+CFLAGS=-O0 -g -std=c99 -I./src
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 
@@ -7,8 +7,11 @@ SRC:=src
 UI:=ui
 CORE:=core
 
-MAIN_SRCS:=main.c
+MAIN_SRCS:=main.c log.c
+MAIN_SRCS_ALL:=$(MAIN_SRCS) log.h
+
 MAIN_SRCS:=$(addprefix $(SRC)/,$(MAIN_SRCS))
+MAIN_SRCS_ALL:=$(addprefix $(SRC)/,$(MAIN_SRCS_ALL))
 
 CORE_SRCS:=core.c cpu/cpu.c
 CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h
@@ -25,7 +28,7 @@ UI_SRCS_ALL:=$(addprefix $(SRC)/$(UI)/,$(UI_SRCS_ALL))
 LIBS:=$(shell pkg-config --libs gtk+-3.0 gmodule-2.0) 
 LIBS+=$(shell sdl2-config --libs)
 
-qpra: $(MAIN_SRCS) libcore.so libui.so
+qpra: $(MAIN_SRCS_ALL) libcore.so libui.so
 	$(CC) $(CFLAGS) $(MAIN_SRCS) -o $@ $(LIBS) -Wl,-rpath,./ -L./ -lcore -lui
 
 libcore.so: $(CORE_SRCS_ALL)

@@ -71,7 +71,7 @@ int xscreen;
  * 5) set GDK visual
  */
 
-gtk_widget_set_double_buffered (area, FALSE);
+//gtk_widget_set_double_buffered (area, FALSE);
 xdisplay = gdk_x11_get_default_xdisplay ();
 xscreen = DefaultScreen (xdisplay);
 screen = gdk_screen_get_default ();

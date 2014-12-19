@@ -1,3 +1,9 @@
+/*
+ * ui/ui_gtk.h -- User interface code, Gtk-specific (header).
+ *
+ * Declares the Gtk UI functions.
+ *
+ */
 
 #ifndef QPRA_UI_GTK_H
 #define QPRA_UI_GTK_H

@@ -1,3 +1,11 @@
+/*
+ * ui/ui_gtk.c -- User interface code, Gtk-specific.
+ *
+ * Functionality of the Gtk UI functions: window initialization and callbacks,
+ * UI loop, OpenGL rendering, SDL input.
+ *
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <gtk/gtk.h>
@@ -34,7 +42,9 @@ void ui_init_gtk(int argc, char **argv)
 
 struct ui_window * ui_window_new_gtk(void)
 {
-    GtkWidget *menubar, *filemenu, *file, *quit;
+    GtkWidget *menubar, *filemenu, *file, *open, *close, *quit;
+    GtkWidget *optmenu, *options, *emusettings;
+    GtkWidget *helpmenu, *help, *doc, *about;
     GtkWidget *box;
     int attributes[] = {
         GLX_RGBA,
@@ -53,13 +63,37 @@ struct ui_window * ui_window_new_gtk(void)
     gtk_container_add(GTK_CONTAINER(window->window), box);
     
     menubar = gtk_menu_bar_new();
+    /* Create File menu and items. */
     filemenu = gtk_menu_new();
     file = gtk_menu_item_new_with_label("File");
+    open = gtk_menu_item_new_with_label("Open ROM");
+    close = gtk_menu_item_new_with_label("Close ROM");
     quit = gtk_menu_item_new_with_label("Quit");
-    
+    /* Create Options menu and items. */
+    optmenu = gtk_menu_new();
+    options = gtk_menu_item_new_with_label("Options");
+    emusettings = gtk_menu_item_new_with_label("Emulation settings");
+    /* Create Help menu and items. */
+    helpmenu = gtk_menu_new();
+    help = gtk_menu_item_new_with_label("Help");
+    doc = gtk_menu_item_new_with_label("Documentation");
+    about = gtk_menu_item_new_with_label("About...");
+   
+    /* Add File menu to menu bar. */
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(file), filemenu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), open);
+    gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), close);
     gtk_menu_shell_append(GTK_MENU_SHELL(filemenu), quit);
     gtk_menu_shell_append(GTK_MENU_SHELL(menubar), file);
+    /* Add Options menu to menu bar. */
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(options), optmenu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(optmenu), emusettings);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menubar), options);
+    /* Add Help menu to menu bar. */
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(help), helpmenu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(helpmenu), doc);
+    gtk_menu_shell_append(GTK_MENU_SHELL(helpmenu), about);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menubar), help);
     
     window->context = NULL;
     window->area = gtk_drawing_area_new();

@@ -1,3 +1,10 @@
+/*
+ * ui/ui.h -- User interface code (header).
+ *
+ * Declares the UI window structure, and redefines the ui_* functions to use
+ * those found on the host platform.
+ *
+ */
 
 #ifndef QPRA_UI_H
 #define QPRA_UI_H
@@ -24,24 +31,6 @@ struct ui_window
     GLXContext context;
 #endif
 };
-
-/* HACK: we need to explicitly redefine SDL_Window so we can manually modify
- * the flags in the UI setup, so as to tell it GL is supported.
- */
-struct SDL_Window
-{
-    const void *magic;
-    Uint32 id;
-    char *title;
-    SDL_Surface *icon;
-    int x, y;
-    int w, h;
-    int min_w, min_h;
-    int max_w, max_h;
-    Uint32 flags;
-};
-
-typedef struct SDL_Window SDL_Window;
 
 #ifdef _WIN32
 

@@ -1,3 +1,11 @@
+/*
+ * main.c -- Program entry point.
+ *
+ * Spawns the emulation and audio worker threads. The main thread then does
+ * window event listening and rendering.
+ *
+ */
+
 #include <SDL2/SDL.h>
 #include "ui/ui.h"
 #include "core/core.h"

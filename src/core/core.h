@@ -1,3 +1,10 @@
+/*
+ * core/core.h -- Emulator core functions (header).
+ *
+ * Declares the system structure, which holds the emulator core components, and
+ * the core functions.
+ *
+ */
 
 #ifndef QPRA_CORE_H
 #define QPRA_CORE_H
