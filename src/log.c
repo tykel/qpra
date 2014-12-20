@@ -26,7 +26,15 @@ void log_debug(const char *format, ...)
     va_list arg;
     
     va_start(arg, format);
-    log_common("[DEBUG] ", format, arg);
+    printf("[DEBUG] ");
+    vprintf(format, arg);
+    printf("\n");
+
+    if(g_uselog) {
+        fprintf(g_logfile, "[DEBUG] ");
+        vfprintf(g_logfile, format, arg);
+        fprintf(g_logfile, "\n");
+    }
     va_end(arg);
 }
 
@@ -35,7 +43,15 @@ void log_warn(const char *format, ...)
     va_list arg;
     
     va_start(arg, format);
-    log_common("[WARNING] ", format, arg);
+    printf("[WARNING] ");
+    vprintf(format, arg);
+    printf("\n");
+
+    if(g_uselog) {
+        fprintf(g_logfile, "[WARNING] ");
+        vfprintf(g_logfile, format, arg);
+        fprintf(g_logfile, "\n");
+    }
     va_end(arg);
 }
 
@@ -44,26 +60,15 @@ void log_error(const char *format, ...)
     va_list arg;
     
     va_start(arg, format);
-    log_common("[ERROR] ", format, arg);
-    va_end(arg);
-}
-
-static void log_common(const char *prefix, const char *format, ...)
-{
-    va_list arg;
-
-    va_start(arg, format);
-    
-    printf(prefix);
-    vprintf(format, arg);
-    printf("\n");
+    fprintf(stderr, "[ERROR] ");
+    vfprintf(stderr, format, arg);
+    fprintf(stderr, "\n");
 
     if(g_uselog) {
-        fprintf(g_logfile, prefix);
+        fprintf(g_logfile, "[ERROR] ");
         vfprintf(g_logfile, format, arg);
         fprintf(g_logfile, "\n");
     }
-    
     va_end(arg);
 }
 

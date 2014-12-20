@@ -8,6 +8,8 @@
 #ifndef QPRA_UI_GTK_H
 #define QPRA_UI_GTK_H
 
+#include <pthread.h>
+
 void ui_init_gtk(int, char **);
 struct ui_window * ui_window_new_gtk(void);
 
@@ -19,5 +21,6 @@ static int gtk_area_start(GtkWidget *, void *);
 static int gtk_area_configure(GtkWidget *, GdkEventConfigure *, void *);
 
 extern uint8_t *framebuffer;
+extern pthread_t t_core; 
 
 #endif

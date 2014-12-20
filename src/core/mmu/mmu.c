@@ -101,10 +101,12 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
     }
    
     /* Everything was allocated properly, phew. */
-    LOGD("Allocated: %hhu ROM banks, %hhu RAM banks, %hhu tile ROM banks,"
-         " %hhu DPCM ROM banks",
-         params->rom_banks, params->ram_banks, params->tile_banks,
-         params->dpcm_banks);
+    LOGD("Allocated: %hhu ROM bank%s, %hhu RAM bank%s, %hhu tile ROM bank%s,"
+         " %hhu DPCM ROM bank%s",
+         params->rom_banks, params->rom_banks > 1 ? "s" : "",
+         params->ram_banks, params->ram_banks > 1 ? "s" : "",
+         params->tile_banks, params->tile_banks > 1 ? "s" : "",
+         params->dpcm_banks, params->dpcm_banks > 1 ? "s" : "");
 
     /* Set up the callbacks for memory access in other parts of the system. */
     if(params->vpu_readb == NULL) {
