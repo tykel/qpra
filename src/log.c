@@ -63,6 +63,8 @@ static void log_common(const char *prefix, const char *format, ...)
         vfprintf(g_logfile, format, arg);
         fprintf(g_logfile, "\n");
     }
+    
+    va_end(arg);
 }
 
 void log_end(void)

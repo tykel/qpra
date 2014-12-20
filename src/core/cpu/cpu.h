@@ -98,7 +98,7 @@ enum core_mode_name {
 };
 
 /* Function declarations. */
-void core_cpu_init(struct core_cpu *, struct core_mmu *);
+int core_cpu_init(struct core_cpu **, struct core_mmu *);
 void core_cpu_destroy(struct core_cpu *);
 
 void core_cpu_i_cycle(struct core_cpu *);

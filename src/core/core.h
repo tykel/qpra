@@ -22,6 +22,6 @@ struct core_system
 };
 
 void *core_entry(void *);
-void core_init(struct core_system **);
+int core_init(struct core_system **);
 
 #endif

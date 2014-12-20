@@ -9,17 +9,20 @@
 #include "core/cpu/cpu.h"
 #include "log.h"
 
-void core_cpu_init(struct core_cpu *cpu, struct core_mmu *mmu)
+int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
 {
-    cpu = NULL;
+    struct core_cpu *cpu;
     
-    cpu = malloc(sizeof(struct core_cpu));
-    if(cpu == NULL) {
+    *pcpu = NULL;
+    *pcpu = malloc(sizeof(struct core_cpu));
+    if(*pcpu == NULL) {
         LOGE("Could not allocate cpu core; exiting");
-        exit(1);
+        return 0;
     }
+    cpu = *pcpu;
 
     cpu->mmu = mmu;
+    return 1;
 }
 
 void core_cpu_destroy(struct core_cpu *cpu)
