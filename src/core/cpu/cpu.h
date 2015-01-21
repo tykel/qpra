@@ -104,5 +104,10 @@ void core_cpu_destroy(struct core_cpu *);
 void core_cpu_i_cycle(struct core_cpu *);
 void core_cpu_i_instr(struct core_cpu *);
 void core_cpu_i_op_nop(struct core_cpu *);
+void core_cpu_i_op_int(struct core_cpu *);
+void core_cpu_i_op_rti(struct core_cpu *);
+void core_cpu_i_op_rts(struct core_cpu *);
+
+static void (*core_cpu_ops[32])(uint16_t *);
 
 #endif

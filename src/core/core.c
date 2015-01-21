@@ -38,6 +38,8 @@ void *core_entry(void *data)
 
     if(pair->argv[1][0] != '-' && core_load_rom(core, pair->argv[1])) {
         LOGD("Loaded ROM file '%s' successfully", pair->argv[1]);
+    } else {
+        LOGD("Couldn't load a ROM file");
     }
 
     if(!core_init(core)) {
