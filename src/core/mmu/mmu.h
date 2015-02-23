@@ -103,7 +103,10 @@ int core_mmu_destroy(struct core_mmu *);
 int core_mmu_bank_select(struct core_mmu *, enum core_mmu_bank, uint8_t);
 
 uint8_t core_mmu_readb(struct core_mmu *, uint16_t);
-void  core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
+void core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
+
+uint16_t core_mmu_readw(struct core_mmu *, uint16_t);
+void core_mmu_writew(struct core_mmu *, uint16_t, uint8_t);
 
 #endif
 

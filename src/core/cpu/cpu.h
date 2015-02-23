@@ -13,6 +13,12 @@
 
 #define NUM_REGS 8
 
+#define FLAG_Z  0x01
+#define FLAG_C  0x02
+#define FLAG_O  0x04
+#define FLAG_N  0x08
+#define FLAG_I  0x10
+
 /* Instruction structure. */
 struct core_instr
 {
@@ -47,6 +53,32 @@ enum core_rid
     R_S,
     R_F,
     R_INVALID
+};
+
+/* Enum for operand size. */
+enum core_opsz
+{
+    OP_16, OP_8
+};
+
+/* Struct for passing parameters to instructions. */
+struct core_instr_params
+{
+    union _op1 {
+        uint8_t *op8;
+        uint16_t *op16;
+    } op1;
+    union _op2 {
+        uint8_t *op8;
+        uint16_t *op16;
+    } op2;
+
+    enum core_opsz size;
+    int start_cycle;
+
+    uint16_t *p;
+    uint16_t *s;
+    uint16_t *f;
 };
 
 /* Accessor functions for the core_instr structure. */
@@ -85,6 +117,11 @@ static inline uint16_t INSTR_D16(struct core_instr *i)
     return (i->db0 << 8) | i->db1;
 }
 
+static inline enum core_opsz INSTR_OPSZ(struct core_instr *i)
+{
+    return (i->ib0 & 0x80) ? OP_16 : OP_8;
+}
+
 enum core_instr_name {
     OP_NOP, OP_INT, OP_RTI, OP_RTS, OP_JP, OP_CL, OP_JZ, OP_CZ, OP_JC, OP_CC,
     OP_JO, OP_CO, OP_JN, OP_CN, OP_NOT, OP_INC, OP_DEC, OP_IND, OP_DED, OP_MV,
@@ -108,6 +145,6 @@ void core_cpu_i_op_int(struct core_cpu *);
 void core_cpu_i_op_rti(struct core_cpu *);
 void core_cpu_i_op_rts(struct core_cpu *);
 
-static void (*core_cpu_ops[32])(uint16_t *);
+static void (*core_cpu_ops[32])(struct core_cpu *, struct core_instr_params *);
 
 #endif
