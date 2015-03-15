@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+#define NUM_INSTRS 32
 #define NUM_REGS 8
 
 #define FLAG_Z  0x01
@@ -84,17 +85,17 @@ struct core_instr_params
 /* Accessor functions for the core_instr structure. */
 static inline int INSTR_W(struct core_instr *i)
 {
-    return (i->ib0 >> 7);
+    return (i->ib0 >> 2) & 0x1;
 }
 
 static inline int INSTR_OP(struct core_instr *i)
 {
-    return (i->ib0 >> 2) & 0x20;
+    return i->ib0 >> 3;
 }
 
 static inline int INSTR_AM(struct core_instr *i)
 {
-    return ((i->ib0 << 2) | (i->ib1 >> 6)) & 0x10;
+    return ((i->ib0 << 2) | (i->ib1 >> 6)) & 0x0f;
 }
 
 static inline int INSTR_RX(struct core_instr *i)
@@ -144,6 +145,34 @@ void core_cpu_i_op_nop(struct core_cpu *);
 void core_cpu_i_op_int(struct core_cpu *);
 void core_cpu_i_op_rti(struct core_cpu *);
 void core_cpu_i_op_rts(struct core_cpu *);
+void core_cpu_i_op_jp(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_cl(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_jz(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_cz(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_jc(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_cc(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_jo(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_co(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_jn(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_cn(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_not(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_inc(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_dec(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_ind(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_ded(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_mv(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_cmp(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_tst(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_add(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_sub(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_mul(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_div(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_lsl(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_lsr(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_asr(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_and(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_or(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_xor(struct core_cpu *, struct core_instr_params *);
 
 static void (*core_cpu_ops[32])(struct core_cpu *, struct core_instr_params *);
 

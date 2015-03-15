@@ -9,6 +9,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "core/core.h"
 #include "core/cpu/cpu.h"
 //#include "core/apu/apu.h"
@@ -47,8 +48,12 @@ void *core_entry(void *data)
         return NULL;
     }
 
+    memcpy(core->mmu->rom_f, core->header->data,
+            core->header->size - sizeof(core->header) - sizeof(uint8_t *));
+
     LOGD("Beginning emulation");
     // Actual emulation here
+    core_cpu_i_instr(core->cpu);
     core_cpu_i_instr(core->cpu);
     LOGD("Finished emulation");
 

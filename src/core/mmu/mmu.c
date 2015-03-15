@@ -119,6 +119,11 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
         return 0;
     }
     mmu->vpu_writeb = params->vpu_writeb;
+    if(params->vpu_getbp == NULL) {
+        LOGE("Invalid VPU byte pointer callback");
+        return 0;
+    }
+    mmu->vpu_getbp = params->vpu_getbp;
     if(params->apu_readb == NULL) {
         LOGE("Invalid APU byte read callback");
         return 0;
@@ -129,6 +134,11 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
         return 0;
     }
     mmu->apu_writeb = params->apu_writeb;
+    if(params->apu_getbp == NULL) {
+        LOGE("Invalid APU byte pointer callback");
+        return 0;
+    }
+    mmu->apu_getbp = params->apu_getbp;
 
     return 1;
 
@@ -274,5 +284,43 @@ void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint8_t v)
 {
     core_mmu_writeb(mmu, a, (v >> 8));
     core_mmu_writeb(mmu, a + 1, v & 0xff);
+}
+
+uint16_t * core_mmu_getwp(struct core_mmu *mmu, uint16_t a)
+{
+    uint16_t *p;
+    /* Check which memory bank to access, or which handler to use. */
+    if(a < A_ROM_SWAP)
+        p = (uint16_t *)&mmu->rom_f[a];
+    else if(a < A_RAM_FIXED)
+        p = (uint16_t *)&mmu->rom_s[a];
+    else if(a < A_RAM_SWAP)
+        p = (uint16_t *)&mmu->ram_f[a];
+    else if(a < A_TILE_SWAP)
+        p = (uint16_t *)&mmu->ram_s[a];
+    else if(a < A_TILE_SWAP_END)
+        p = (uint16_t *)&mmu->tile_s[a];
+    else if(a < A_VPU_END)
+        p = (uint16_t *)mmu->vpu_getbp(a);
+    else if(a < A_APU_END)
+        p = (uint16_t *)mmu->apu_getbp(a);
+    else if(a < A_DPCM_SWAP_END)
+        p = (uint16_t *)&mmu->dpcm_s[a];
+    else if(a < A_CART_FIXED_END)
+        p = (uint16_t *)&mmu->cart_f[a];
+    else if(a == A_ROM_BANK_SELECT)
+        p = (uint16_t *)&mmu->rom_s_bank;
+    else if(a == A_RAM_BANK_SELECT)
+        p = (uint16_t *)&mmu->ram_s_bank;
+    else {
+        LOGW("unhandled address $%04x read", a);
+        p = NULL;
+    }
+    return p;
+}
+
+uint8_t * core_mmu_getbp(struct core_mmu *mmu, uint16_t a)
+{
+    return (uint8_t *)core_mmu_getwp(mmu, a);
 }
 

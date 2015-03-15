@@ -11,6 +11,41 @@
 #include "core/mmu/mmu.h"
 #include "log.h"
 
+static char *instrnam[NUM_INSTRS] = {
+    "nop", /* 00 */
+    "int", /* 01 */
+    "rts", /* 02 */
+    "rti", /* 03 */
+    "jp",  /* 04 */
+    "cl",  /* 05 */
+    "jz",  /* 06 */
+    "cz",  /* 07 */
+    "jc",  /* 08 */
+    "cc",  /* 09 */
+    "jo",  /* 0a */
+    "co",  /* 0b */
+    "jn",  /* 0c */
+    "cn",  /* 0d */
+    "not", /* 0e */
+    "inc", /* 0f */
+    "dec", /* 10 */
+    "ind", /* 11 */
+    "ded", /* 12 */
+    "mv",  /* 13 */
+    "cmp", /* 14 */
+    "tst", /* 15 */
+    "add", /* 16 */
+    "sub", /* 17 */
+    "mul", /* 18 */
+    "div", /* 19 */
+    "lsl", /* 1a */
+    "lsr", /* 1b */
+    "asr", /* 1c */
+    "and", /* 1d */
+    "or",  /* 1e */
+    "xor"  /* 1f */
+};
+
 int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
 {
     struct core_cpu *cpu;
@@ -32,6 +67,9 @@ int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
         return 0;
     }
     memset(cpu->i, 0, sizeof(*cpu->i));
+
+    core_cpu_ops[0x0e] = core_cpu_i_op_not;
+
     return 1;
 }
 
@@ -74,6 +112,74 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             params.s = &cpu->r[R_S];
             params.f = &cpu->r[R_F];
             params.start_cycle = 0; /* ?? */
+            if(cpu->i_cycles == 1) {
+                /* First operand 1. */
+                switch ((enum core_mode_name) INSTR_AM(cpu->i)) {
+                    case AM_DR:
+                    case AM_DR_DR:
+                    case AM_DR_IR:
+                    case AM_DR_DB:
+                    case AM_DR_IB:
+                    case AM_DR_DW:
+                    case AM_DR_IW:
+                        params.op1.op16 = &cpu->r[INSTR_RX(cpu->i)];
+                        break;
+                    case AM_IR:
+                    case AM_IR_DR:
+                        params.op1.op16 =
+                            core_mmu_getwp(cpu->mmu, cpu->r[INSTR_RX(cpu->i)]);
+                        break;
+                    case AM_DB:
+                        params.op1.op8 = &cpu->i->db0;
+                        break;
+                    case AM_IB:
+                    case AM_IB_DR:
+                        params.op1.op16 =
+                            core_mmu_getwp(cpu->mmu, cpu->r[R_P] + cpu->i->db0);
+                        break;
+                    case AM_DW:
+                        params.op1.op16 = (uint16_t *)&cpu->i->db0;
+                        break;
+                    case AM_IW:
+                    case AM_IW_DR:
+                        params.op1.op16 =
+                            core_mmu_getwp(cpu->mmu, *(uint16_t *)&cpu->i->db0);
+                    default:
+                        break;
+                }
+                /* Now for operand 2. */
+                switch ((enum core_mode_name) INSTR_AM(cpu->i)) {
+                    case AM_DR_DR:
+                    case AM_IR_DR:
+                        params.op2.op16 = &cpu->r[INSTR_RX(cpu->i)];
+                        break;
+                    case AM_IB_DR:
+                    case AM_IW_DR:
+                        params.op2.op16 = &cpu->r[INSTR_RX(cpu->i)];
+                        break;
+                    case AM_DR_IR:
+                        params.op2.op16 =
+                            core_mmu_getwp(cpu->mmu, cpu->r[INSTR_RX(cpu->i)]);
+                        break;
+                    case AM_DR_DB:
+                        params.op2.op8 = &cpu->i->db0;
+                        break;
+                    case AM_DR_DW:
+                        params.op2.op16 = (uint16_t *)&cpu->i->db0;
+                        break;
+                    case AM_DR_IB:
+                        params.op2.op16 =
+                            core_mmu_getwp(cpu->mmu, cpu->r[R_P] + cpu->i->db0);
+                        break;
+                    case AM_DR_IW:
+                        params.op2.op16 =
+                            core_mmu_getwp(cpu->mmu, *(uint16_t *)&cpu->i->db0);
+                        break;
+                    default:
+                        break;
+                }
+            }
+
             switch((enum core_mode_name) INSTR_AM(cpu->i)) {
                 case AM_DR:
                     core_cpu_ops[INSTR_OP(cpu->i)](cpu, &params);
@@ -113,24 +219,48 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
     }
 }
 
+/*
+ * core_cpu_i_instr
+ *
+ * Execute all the cycles for the current instruction.
+ */
 void core_cpu_i_instr(struct core_cpu *cpu)
 {
+    /* Elapsed cycles are also recorded in the core_cpu structure, but when
+     * we want to log the elapsed cycles after the instruction is complete,
+     * that counter has been reset. So we record it here too.
+     */
     int cycles = 0;
-
 
     do {
         core_cpu_i_cycle(cpu);
         ++cycles;
     } while(cpu->i_cycles > 0);
-    LOGD("core.cpu: processed %d-cycle instr.", cycles);
+    LOGD("core.cpu: %s (%d cycles)", instrnam[INSTR_OP(cpu->i)], cycles);
 }
 
+/*
+ ******************************************************************************
+ * Instruction implementations
+ ******************************************************************************
+ */
+
+/*
+ * core_cpu_i_op_nop
+ *
+ * NOP instruction implementation.
+ */
 void core_cpu_i_op_nop(struct core_cpu *cpu)
 {
-    LOGD("core.cpu: nop");
+    --cpu->r[R_P];
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_int
+ *
+ * INT instruction implementation.
+ */
 void core_cpu_i_op_int(struct core_cpu *cpu)
 {
     if(cpu->i_cycles == 1) {
@@ -146,6 +276,11 @@ void core_cpu_i_op_int(struct core_cpu *cpu)
     }
 }
 
+/*
+ * core_cpu_i_op_rti
+ *
+ * RTI instruction implementation.
+ */
 void core_cpu_i_op_rti(struct core_cpu *cpu)
 {
     if(cpu->i_cycles == 1) {
@@ -163,6 +298,11 @@ void core_cpu_i_op_rti(struct core_cpu *cpu)
     }
 }
 
+/*
+ * core_cpu_i_op_rts
+ *
+ * RTS instruction implementation.
+ */
 void core_cpu_i_op_rts(struct core_cpu *cpu)
 {
     if(cpu->i_cycles == 1) {
@@ -174,132 +314,248 @@ void core_cpu_i_op_rts(struct core_cpu *cpu)
     }
 }
 
-void core_cpu_i_op_jp(struct core_cpu *cpu, struct core_instr_params *params)
+void core_cpu_i__jump(struct core_cpu *cpu,
+                      struct core_instr_params *params,
+                      int flag)
 {
-    static uint8_t v;
+    static uint16_t v;
     v = *params->op1.op16;
     /* Indirect reg/byte/word: the memory access uses an extra cycle. */
     if((INSTR_AM(cpu->i) & 1) && cpu->i_cycles == 1) {
         v = core_mmu_readw(cpu->mmu, *params->op1.op16);
         ++cpu->i_cycles;
     } else {
+        switch(flag) {
+        case FLAG_C:
+        case FLAG_Z:
+        case FLAG_O:
+        case FLAG_N:
+            if(*params->f & flag)
+                *params->p = v;
+            break;
+        default:
+            *params->p = v;
+            break;
+        }
+        cpu->i_cycles = 0;
+    }
+}
+
+void core_cpu_i__call(struct core_cpu *cpu,
+                      struct core_instr_params *params,
+                      int flag)
+{
+    static uint16_t v;
+    v = *params->op1.op16;
+    if(cpu->i_cycles == 1) {
+        core_mmu_writew(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
+        ++cpu->i_cycles;
+    } else if(cpu->i_cycles == 2) {
+        cpu->r[R_S] -= 2;
+        /* Indirect reg/byte/word: the memory access uses an extra cycle. */
+        if(INSTR_AM(cpu->i) & 1) {
+            v = core_mmu_readw(cpu->mmu, *params->op1.op16);
+            ++cpu->i_cycles;
+        } else {
+            switch(flag) {
+            case FLAG_Z:
+            case FLAG_C:
+            case FLAG_O:
+            case FLAG_N:
+                if(*params->f & flag)
+                    *params->p = v;
+                break;
+            default:
+                *params->p = v;
+                break;
+            }
+            cpu->i_cycles = 0;
+        }
+    } else if(cpu->i_cycles == 3) {
         *params->p = v;
         cpu->i_cycles = 0;
     }
 }
 
+/*
+ * core_cpu_i_op_jp
+ *
+ * JP instruction implementation.
+ */
+void core_cpu_i_op_jp(struct core_cpu *cpu, struct core_instr_params *params)
+{
+    core_cpu_i__jump(cpu, params, 0);
+}
+
+/*
+ * core_cpu_i_op_cl
+ *
+ * CL instruction implementation.
+ */
 void core_cpu_i_op_cl(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    core_mmu_writew(cpu->mmu, *params->s, *params->p);
-    *params->s -= 2;
-    *params->p = *params->op1.op16;
-    cpu->i_cycles = 0;
+    core_cpu_i__call(cpu, params, 0);
 }
 
+/*
+ * core_cpu_i_op_jz
+ *
+ * JZ instruction implementation.
+ */
 void core_cpu_i_op_jz(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    if(*params->f & FLAG_Z)
-        *params->p = *params->op1.op16;
-    cpu->i_cycles = 0;
+    core_cpu_i__jump(cpu, params, FLAG_Z);
 }
 
+/*
+ * core_cpu_i_op_cz
+ *
+ * CZ instruction implementation.
+ */
 void core_cpu_i_op_cz(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    if(*params->f & FLAG_Z) {
-        core_mmu_writew(cpu->mmu, *params->s, *params->p);
-        *params->s -= 2;
-        *params->p = *params->op1.op16;
-    }
-    cpu->i_cycles = 0;
+    core_cpu_i__call(cpu, params, FLAG_Z);
 }
 
+/*
+ * core_cpu_i_op_jc
+ *
+ * JC instruction implementation.
+ */
 void core_cpu_i_op_jc(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    if(*params->f & FLAG_C)
-        *params->p = *params->op1.op16;
-    cpu->i_cycles = 0;
+    core_cpu_i__jump(cpu, params, FLAG_C);
 }
 
+/*
+ * core_cpu_i_op_cc
+ *
+ * CC instruction implementation.
+ */
 void core_cpu_i_op_cc(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    if(*params->f & FLAG_C) {
-        core_mmu_writew(cpu->mmu, *params->s, *params->p);
-        *params->s -= 2;
-        *params->p = *params->op1.op16;
-    }
-    cpu->i_cycles = 0;
+    core_cpu_i__call(cpu, params, FLAG_C);
 }
 
+/*
+ * core_cpu_i_op_jo
+ *
+ * JO instruction implementation.
+ */
 void core_cpu_i_op_jo(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    if(*params->f & FLAG_O)
-        *params->p = *params->op1.op16;
-    cpu->i_cycles = 0;
+    core_cpu_i__jump(cpu, params, FLAG_O);
 }
 
+/*
+ * core_cpu_i_op_co
+ *
+ * CO instruction implementation.
+ */
 void core_cpu_i_op_co(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    if(*params->f & FLAG_O) {
-        core_mmu_writew(cpu->mmu, *params->s, *params->p);
-        *params->s -= 2;
-        *params->p = *params->op1.op16;
-    }
-    cpu->i_cycles = 0;
+    core_cpu_i__call(cpu, params, FLAG_O);
 }
 
+/*
+ * core_cpu_i_op_jn
+ *
+ * JN instruction implementation.
+ */
 void core_cpu_i_op_jn(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    if(*params->f & FLAG_N)
-        *params->p = *params->op1.op16;
-    cpu->i_cycles = 0;
+    core_cpu_i__jump(cpu, params, FLAG_N);
 }
 
+/*
+ * core_cpu_i_op_cn
+ *
+ * CN instruction implementation.
+ */
 void core_cpu_i_op_cn(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    if(*params->f & FLAG_N) {
-        core_mmu_writew(cpu->mmu, *params->s, *params->p);
-        *params->s -= 2;
-        *params->p = *params->op1.op16;
-    }
-    cpu->i_cycles = 0;
+    core_cpu_i__call(cpu, params, FLAG_N);
 }
 
+/*
+ * core_cpu_i_op_not
+ *
+ * NOT instruction implementation.
+ */
 void core_cpu_i_op_not(struct core_cpu *cpu, struct core_instr_params *params)
 {
-    *params->op1.op16 = ~*params->op1.op16;
-    cpu->i_cycles = 0;
+    static uint16_t *v;
+    v= params->op1.op16;
+    /* Indirect reg/byte/word: the memory access uses an extra cycle. */
+    if((INSTR_AM(cpu->i) & 1) && cpu->i_cycles == 1) {
+        v = core_mmu_getwp(cpu->mmu, *params->op1.op16);
+        ++cpu->i_cycles;
+    } else {
+        *v = ~*v;
+        cpu->i_cycles = 0;
+    }
 }
 
+/*
+ * core_cpu_i_op_inc
+ *
+ * INC instruction implementation.
+ */
 void core_cpu_i_op_inc(struct core_cpu *cpu, struct core_instr_params *params)
 {
     *params->op1.op16 += 1;
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_dec
+ *
+ * DEC instruction implementation.
+ */
 void core_cpu_i_op_dec(struct core_cpu *cpu, struct core_instr_params *params)
 {
     *params->op1.op16 -= 1;
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_ind
+ *
+ * IND instruction implementation.
+ */
 void core_cpu_i_op_ind(struct core_cpu *cpu, struct core_instr_params *params)
 {
     *params->op1.op16 += 2;
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_ded
+ *
+ * DED instruction implementation.
+ */
 void core_cpu_i_op_ded(struct core_cpu *cpu, struct core_instr_params *params)
 {
     *params->op1.op16 -= 2;
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_mv
+ *
+ * MV instruction implementation.
+ */
 void core_cpu_i_op_mv(struct core_cpu *cpu, struct core_instr_params *params)
 {
     *params->op1.op16 = *params->op2.op16;
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_cmp
+ *
+ * CMP instruction implementation.
+ */
 void core_cpu_i_op_cmp(struct core_cpu *cpu, struct core_instr_params *params)
 {
     int temp = *params->op1.op16 - *params->op2.op16;
@@ -310,18 +566,33 @@ void core_cpu_i_op_cmp(struct core_cpu *cpu, struct core_instr_params *params)
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_tst
+ *
+ * TST instruction implementation.
+ */
 void core_cpu_i_op_tst(struct core_cpu *cpu, struct core_instr_params *params)
 {
     *params->op1.op16 = *params->op2.op16;
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_add
+ *
+ * ADD instruction implementation.
+ */
 void core_cpu_i_op_add(struct core_cpu *cpu, struct core_instr_params *params)
 {
     *params->op1.op16 = *params->op2.op16;
     cpu->i_cycles = 0;
 }
 
+/*
+ * core_cpu_i_op_sub
+ *
+ * SUB instruction implementation.
+ */
 void core_cpu_i_op_sub(struct core_cpu *cpu, struct core_instr_params *params)
 {
     *params->op1.op16 = *params->op2.op16;

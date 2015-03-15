@@ -53,9 +53,11 @@ struct core_mmu_params
 
     uint8_t (*vpu_readb)(uint16_t);
     void (*vpu_writeb)(uint16_t, uint8_t);
+    uint8_t * (*vpu_getbp)(uint16_t);
 
     uint8_t (*apu_readb)(uint16_t);
     void (*apu_writeb)(uint16_t, uint8_t);
+    uint8_t * (*apu_getbp)(uint16_t);
 };
 
 /* Structure holding pointers to the memory banks, as well as handlers for
@@ -82,9 +84,11 @@ struct core_mmu
 
     uint8_t (*vpu_readb)(uint16_t);
     void (*vpu_writeb)(uint16_t, uint8_t);
+    uint8_t * (*vpu_getbp)(uint16_t);
 
     uint8_t (*apu_readb)(uint16_t);
     void (*apu_writeb)(uint16_t, uint8_t);
+    uint8_t * (*apu_getbp)(uint16_t);
 };
 
 /* Static memory banks. */
@@ -107,6 +111,9 @@ void core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
 
 uint16_t core_mmu_readw(struct core_mmu *, uint16_t);
 void core_mmu_writew(struct core_mmu *, uint16_t, uint8_t);
+
+uint16_t * core_mmu_getwp(struct core_mmu *, uint16_t);
+uint8_t * core_mmu_getbp(struct core_mmu *, uint16_t);
 
 #endif
 
