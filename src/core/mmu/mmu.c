@@ -280,7 +280,7 @@ uint16_t core_mmu_readw(struct core_mmu *mmu, uint16_t a)
     return result;
 }
 
-void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint8_t v)
+void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint16_t v)
 {
     core_mmu_writeb(mmu, a, (v >> 8));
     core_mmu_writeb(mmu, a + 1, v & 0xff);

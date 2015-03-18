@@ -110,10 +110,27 @@ uint8_t core_mmu_readb(struct core_mmu *, uint16_t);
 void core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
 
 uint16_t core_mmu_readw(struct core_mmu *, uint16_t);
-void core_mmu_writew(struct core_mmu *, uint16_t, uint8_t);
+void core_mmu_writew(struct core_mmu *, uint16_t, uint16_t);
 
 uint16_t * core_mmu_getwp(struct core_mmu *, uint16_t);
 uint8_t * core_mmu_getbp(struct core_mmu *, uint16_t);
+
+/*
+ * Emulate 1-cycle memory access delay by using a two-step access: in cycle 0,
+ * send a read request for a given address; in cycle 1, read the result (from
+ * some data register, in the CPU).
+ * Similarly, a write requests is posted in cycle 0, and is effective in cycle
+ * 1, although we do not need to read anything back.
+ */
+int core_mmu_rb_send(struct core_mmu *, uint16_t);
+uint8_t core_mmu_rb_read(struct core_mmu *);
+int core_mmu_wb_send(struct core_mmu *, uint16_t, uint8_t);
+
+int core_mmu_rw_send(struct core_mmu *, uint16_t);
+uint16_t core_mmu_rw_read(struct core_mmu *);
+int core_mmu_ww_send(struct core_mmu *, uint16_t, uint16_t);
+
+void core_mmu_update(struct core_mmu *);
 
 #endif
 

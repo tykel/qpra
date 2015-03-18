@@ -33,7 +33,7 @@ LIBS+=$(shell sdl2-config --libs)
 all: qpra write_kpr
 
 qpra: $(MAIN_SRCS_ALL) libcore.so libui.so
-	$(CC) $(CFLAGS) $(MAIN_SRCS) -o $@ $(LIBS) -Wl,-rpath,./ -L./ -lcore -lui
+	$(CC) $(CFLAGS) $(MAIN_SRCS) -o $@ $(LIBS) -Wl,-rpath,. -L. -lcore -lui
 
 libcore.so: $(CORE_SRCS_ALL)
 	$(CC) $(CFLAGS) -fPIC $(CORE_SRCS) -shared -o $@

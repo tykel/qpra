@@ -65,21 +65,28 @@ enum core_opsz
 /* Struct for passing parameters to instructions. */
 struct core_instr_params
 {
-    union _op1 {
-        uint8_t *op8;
-        uint16_t *op16;
-    } op1;
-    union _op2 {
-        uint8_t *op8;
-        uint16_t *op16;
-    } op2;
+    uint16_t op1;
+    uint16_t op2;
 
     enum core_opsz size;
     int start_cycle;
 
-    uint16_t *p;
-    uint16_t *s;
-    uint16_t *f;
+    /* Save registers which may be overwritten */
+    uint16_t p;
+    uint16_t s;
+    uint16_t f;
+};
+
+enum core_instr_name {
+    OP_NOP, OP_INT, OP_RTI, OP_RTS, OP_JP, OP_CL, OP_JZ, OP_CZ, OP_JC, OP_CC,
+    OP_JO, OP_CO, OP_JN, OP_CN, OP_NOT, OP_INC, OP_DEC, OP_IND, OP_DED, OP_MV,
+    OP_CMP, OP_TST, OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_LSL, OP_LSR, OP_ASR,
+    OP_AND, OP_OR, OP_XOR
+};
+
+enum core_mode_name {
+    AM_DR, AM_IR, AM_DB, AM_IB, AM_DW, AM_IW, AM_DR_DR, AM_DR_IR, AM_IR_DR,
+    AM_DR_DB, AM_DR_IB, AM_DR_DW, AM_DR_IW, AM_IB_DR, AM_IW_DR, AM_RESERVED
 };
 
 /* Accessor functions for the core_instr structure. */
@@ -115,7 +122,7 @@ static inline uint8_t INSTR_D8(struct core_instr *i)
 
 static inline uint16_t INSTR_D16(struct core_instr *i)
 {
-    return (i->db0 << 8) | i->db1;
+    return *(uint16_t *)&i->db0;
 }
 
 static inline enum core_opsz INSTR_OPSZ(struct core_instr *i)
@@ -123,17 +130,98 @@ static inline enum core_opsz INSTR_OPSZ(struct core_instr *i)
     return (i->ib0 & 0x80) ? OP_16 : OP_8;
 }
 
-enum core_instr_name {
-    OP_NOP, OP_INT, OP_RTI, OP_RTS, OP_JP, OP_CL, OP_JZ, OP_CZ, OP_JC, OP_CC,
-    OP_JO, OP_CO, OP_JN, OP_CN, OP_NOT, OP_INC, OP_DEC, OP_IND, OP_DED, OP_MV,
-    OP_CMP, OP_TST, OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_LSL, OP_LSR, OP_ASR,
-    OP_AND, OP_OR, OP_XOR
-};
+/* Utility functions for querying various parameters about instructions. */
+static inline int instr_is_void(struct core_instr *i)
+{
+    return INSTR_OP(i) < 4;
+}
 
-enum core_mode_name {
-    AM_DR, AM_IR, AM_DB, AM_IB, AM_DW, AM_IW, AM_DR_DR, AM_DR_IR, AM_IR_DR,
-    AM_DR_DB, AM_DR_IB, AM_DR_DW, AM_DR_IW, AM_IB_DR, AM_IW_DR, AM_RESERVED
-};
+static inline int instr_is_1op(struct core_instr *i)
+{
+    return INSTR_AM(i) < AM_DR_DR;
+}
+
+static inline int instr_is_2op(struct core_instr *i)
+{
+    return INSTR_AM(i) >= AM_DR_DR;
+}
+
+static inline int instr_is_op1ptr(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_IR || am == AM_IB || am == AM_IW || am == AM_IR_DR ||
+            am == AM_IB_DR || am == AM_IW_DR);
+}
+
+static inline int instr_is_op2ptr(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_DR_IR || am == AM_DR_IB || am == AM_DR_IW);
+}
+
+static inline int instr_is_op1data(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_DB || am == AM_DW);
+}
+
+static inline int instr_is_op2data(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_DR_DB || am == AM_DR_DW);
+}
+
+static inline int instr_is_srcptr(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_IR || am == AM_IB || am == AM_IW || am == AM_DR_IR ||
+            am == AM_DR_IB || am == AM_DR_IW);
+}
+
+static inline int instr_is_dstptr(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_IR || am == AM_IB || am == AM_IW || am == AM_IR_DR ||
+            am == AM_IB_DR || am == AM_IW_DR);
+}
+
+static inline int instr_has_ptr(struct core_instr *i)
+{
+    return (instr_is_op1ptr(i) || instr_is_op2ptr(i));
+}
+
+static inline int instr_has_db(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_DB || am == AM_IB || am == AM_DR_DB || am == AM_DR_IB ||
+            am == AM_IB_DR);
+}
+
+static inline int instr_has_dw(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_DW || am == AM_IW || am == AM_DR_DW || am == AM_DR_IW ||
+            am == AM_IW_DR);
+}
+
+static inline int instr_has_data(struct core_instr *i)
+{
+    return (instr_has_db(i) || instr_has_dw(i));
+}
+
+static inline int instr_dr_only(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_DR || am == AM_DR_DR);
+}
+
+static inline int instr_has_spderef(struct core_instr *i)
+{
+    int op = INSTR_OP(i);
+    return (op == OP_INT || op == OP_RTI || op == OP_RTS || op == OP_CL
+            || op == OP_CZ || op == OP_CC || op == OP_CO || op == OP_CN);
+}
+
 
 /* Function declarations. */
 int core_cpu_init(struct core_cpu **, struct core_mmu *);
