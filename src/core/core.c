@@ -58,6 +58,8 @@ void *core_entry(void *data)
     core_cpu_i_instr(core->cpu);
     core_cpu_i_instr(core->cpu);
     core_cpu_i_instr(core->cpu);
+    core_cpu_i_instr(core->cpu);
+    core_cpu_i_instr(core->cpu);
     LOGD("Finished emulation");
 
     LOGD("Emulation core thread exiting");

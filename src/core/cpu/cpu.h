@@ -43,7 +43,8 @@ struct core_cpu
     struct core_instr *i;
     /* Instruction timer; how many cycles the current instruction has used. */
     int i_cycles;
-    /* */
+    /* Instruction done state. */
+    int i_done;
 };
 
 /* Enum for symbolic register file access. */
@@ -107,12 +108,12 @@ static inline int INSTR_AM(struct core_instr *i)
 
 static inline int INSTR_RX(struct core_instr *i)
 {
-    return (i->ib1 >> 3) & 0x8;
+    return (i->ib1 >> 3) & 0x7;
 }
 
 static inline int INSTR_RY(struct core_instr *i)
 {
-    return i->ib1 & 0x8;
+    return i->ib1 & 0x7;
 }
 
 static inline uint8_t INSTR_D8(struct core_instr *i)
@@ -229,10 +230,10 @@ void core_cpu_destroy(struct core_cpu *);
 
 void core_cpu_i_cycle(struct core_cpu *);
 void core_cpu_i_instr(struct core_cpu *);
-void core_cpu_i_op_nop(struct core_cpu *);
-void core_cpu_i_op_int(struct core_cpu *);
-void core_cpu_i_op_rti(struct core_cpu *);
-void core_cpu_i_op_rts(struct core_cpu *);
+void core_cpu_i_op_nop(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_int(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_rti(struct core_cpu *, struct core_instr_params *);
+void core_cpu_i_op_rts(struct core_cpu *, struct core_instr_params *);
 void core_cpu_i_op_jp(struct core_cpu *, struct core_instr_params *);
 void core_cpu_i_op_cl(struct core_cpu *, struct core_instr_params *);
 void core_cpu_i_op_jz(struct core_cpu *, struct core_instr_params *);
