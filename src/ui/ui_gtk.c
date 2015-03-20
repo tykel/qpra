@@ -16,7 +16,9 @@
 
 struct ui_window *window;
 
-int done = 0;
+int mark_done();
+int done();
+
 int texname;
 
 void ui_init_gtk(int argc, char **argv)
@@ -128,7 +130,7 @@ void ui_run_gtk(struct ui_window *window)
 {
     ui_draw_init();
     
-    while(!done) {
+    while(!done()) {
         SDL_Event event;
 
         while(gtk_events_pending()) {
@@ -138,7 +140,7 @@ void ui_run_gtk(struct ui_window *window)
         while(SDL_PollEvent(&event)) {
             switch(event.type) {
                 case SDL_QUIT:
-                    done = 1;
+                    mark_done();
                 default:
                     break;
             }
@@ -155,11 +157,13 @@ void ui_run_gtk(struct ui_window *window)
 
 static void ui_gtk_quit(void)
 {
-    done = 1;
+    mark_done();
 }
 
 static void ui_gtk_quit_destroy(void)
 {
+    if(!done())
+        mark_done();
     free(framebuffer);
     free(window);
     exit(0);

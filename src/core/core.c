@@ -19,6 +19,8 @@
 //#include "core/pad/pad.h"
 #include "log.h"
 
+int done();
+
 struct arg_pair
 {
     int argc;
@@ -52,18 +54,12 @@ void *core_entry(void *data)
             core->header->size - sizeof(core->header) - sizeof(uint8_t *));
 
     LOGD("Beginning emulation");
-    // Actual emulation here
-    core_cpu_i_instr(core->cpu);
-    core_cpu_i_instr(core->cpu);
-    core_cpu_i_instr(core->cpu);
-    core_cpu_i_instr(core->cpu);
-    core_cpu_i_instr(core->cpu);
-    core_cpu_i_instr(core->cpu);
-    core_cpu_i_instr(core->cpu);
+    while(!done()) {
+        core_cpu_i_instr(core->cpu);
+    }
     LOGD("Finished emulation");
 
     LOGD("Emulation core thread exiting");
-    return NULL;
 }
 
 int core_init(struct core_system *core)

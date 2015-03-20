@@ -145,7 +145,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         cpu->i->ib0 = B_HI(t);
         cpu->i->ib1 = B_LO(t);
         i = core_cpu_ops[INSTR_OP(cpu->i)];
-        LOGD("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
+        LOGV("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
         
         /* Nothing else to fetch. */
         if(instr_is_void(cpu->i)) {
@@ -194,9 +194,9 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             cpu->i->db0 = B_HI(t);
             if(instr_has_dw(cpu->i)) {
                 cpu->i->db1 = B_LO(t);
-                LOGD("core.cpu: data = %02x %02x", cpu->i->db0, cpu->i->db1);
+                LOGV("core.cpu: data = %02x %02x", cpu->i->db0, cpu->i->db1);
             } else {
-                LOGD("core.cpu: data = %02x", cpu->i->db0);
+                LOGV("core.cpu: data = %02x", cpu->i->db0);
             }
             if(instr_is_op1data(cpu->i)) {
                 p.op1 = (INSTR_AM(cpu->i) == AM_DB) ?
@@ -337,7 +337,7 @@ void core_cpu_i_instr(struct core_cpu *cpu)
         //LOGD("core.cpu: ... cycle %d", cpu->i_cycles);
     } while(!cpu->i_done);
 
-    LOGD("core.cpu: %04x: %s (%d cycles)",
+    LOGV("core.cpu: %04x: %s (%d cycles)",
          pc, instrnam[INSTR_OP(cpu->i)], cpu->i_cycles);
 }
 
@@ -365,14 +365,16 @@ void core_cpu_i_op_nop(struct core_cpu *cpu, struct core_instr_params *p)
 void core_cpu_i_op_int(struct core_cpu *cpu, struct core_instr_params *p)
 {
     if(cpu->i_cycles == 1) {
-        core_mmu_writew(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
+        core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
         cpu->r[R_S] -= 2;
     } else if(cpu->i_cycles == 2) {
-        core_mmu_writew(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
+        core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
         cpu->r[R_S] -= 2;
         cpu->r[R_F] = FLAG_I;
+    } else if(cpu->i_cycles == 3) {
+        core_mmu_rw_send(cpu->mmu, 0xfffe);
     } else {
-        cpu->r[R_P] = core_mmu_readw(cpu->mmu, 0xfffe);
+        cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
     }
 }
 
@@ -384,11 +386,14 @@ void core_cpu_i_op_int(struct core_cpu *cpu, struct core_instr_params *p)
 void core_cpu_i_op_rti(struct core_cpu *cpu, struct core_instr_params *p)
 {
     if(cpu->i_cycles == 1) {
-        cpu->r[R_F] = core_mmu_readw(cpu->mmu, cpu->r[R_S]);
+        core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
     } else if(cpu->i_cycles == 2) {
-        cpu->r[R_P] = core_mmu_readw(cpu->mmu, cpu->r[R_S]);
+        cpu->r[R_F] = core_mmu_rw_fetch(cpu->mmu);
+        core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
+    } else {
+        cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
     }
 }
 
@@ -400,9 +405,10 @@ void core_cpu_i_op_rti(struct core_cpu *cpu, struct core_instr_params *p)
 void core_cpu_i_op_rts(struct core_cpu *cpu, struct core_instr_params *p)
 {
     if(cpu->i_cycles == 1) {
-        cpu->r[R_P] = core_mmu_readw(cpu->mmu, cpu->r[R_S]);
-    } else {
+        core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
+    } else {
+        cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
     }
 }
 
@@ -420,16 +426,13 @@ void core_cpu_i__call(struct core_cpu *cpu,
 {
     if(cpu->i_cycles == p->start_cycle) {
         if(p->f & flag || !flag) {
-            core_mmu_writew(cpu->mmu, p->s, p->p);
-        }
-
-    } else /* if(cpu->i_cycles == p->start_cycle + 1)*/ {
-        /* Indirect reg/byte/word: the memory access uses an extra cycle. */
-        if(p->f & flag || !flag) {
+            core_mmu_ww_send(cpu->mmu, p->s, p->p);
             cpu->r[R_S] -= 2;
             cpu->r[R_P] = p->op1;
         }
 
+    } else {
+        /* Simply need to wait for write of p to m[s] to complete. */
     }
 }
 

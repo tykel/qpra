@@ -21,6 +21,26 @@ void log_init(const char *logfile)
         g_uselog = 1;
 }
 
+void log_null(const char *format, ...)
+{
+}
+
+void log_verbose(const char *format, ...)
+{
+    va_list arg;
+    
+    va_start(arg, format);
+    printf("[VRBSE] ");
+    vprintf(format, arg);
+    printf("\n");
+
+    if(g_uselog) {
+        fprintf(g_logfile, "[VRBSE] ");
+        vfprintf(g_logfile, format, arg);
+        fprintf(g_logfile, "\n");
+    }
+    va_end(arg);
+}
 void log_debug(const char *format, ...)
 {
     va_list arg;

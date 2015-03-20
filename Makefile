@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O0 -g -std=c99 -I./src
+CFLAGS=-O0 -g -std=c99 -I./src -DLOG_LEVEL=1
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 

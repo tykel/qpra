@@ -11,6 +11,17 @@
 
 pthread_t t_core;
 pthread_t t_audio;
+int g_done;
+
+int mark_done()
+{
+    g_done = 1;
+}
+
+int done()
+{
+    return g_done;
+}
 
 struct arg_pair
 {
@@ -27,8 +38,10 @@ int main(int argc, char **argv)
     window = ui_window_new();
 
     /* Spawn the main emulation core thread, if we have a file to load. */
-    if(argc > 1)
+    if(argc > 1) {
         pthread_create(&t_core, NULL, core_entry, &pair);
+        pthread_detach(t_core);
+    }
     
     /* Start the GUI thread function. */
     ui_run(window);
