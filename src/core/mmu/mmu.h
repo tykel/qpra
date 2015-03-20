@@ -60,6 +60,10 @@ struct core_mmu_params
     uint8_t * (*apu_getbp)(uint16_t);
 };
 
+enum core_mmu_access {
+    MMU_NONE, MMU_READ, MMU_WRITE
+};
+
 /* Structure holding pointers to the memory banks, as well as handlers for
  * external parts of the address space.
  */
@@ -81,6 +85,11 @@ struct core_mmu
     uint8_t tile_s_total;
     uint8_t dpcm_bank;
     uint8_t dpcm_s_total;
+
+    enum core_mmu_access pending;
+    uint16_t a;
+    uint16_t v;
+    size_t vsz;
 
     uint8_t (*vpu_readb)(uint16_t);
     void (*vpu_writeb)(uint16_t, uint8_t);
@@ -123,14 +132,19 @@ uint8_t * core_mmu_getbp(struct core_mmu *, uint16_t);
  * 1, although we do not need to read anything back.
  */
 int core_mmu_rb_send(struct core_mmu *, uint16_t);
-uint8_t core_mmu_rb_read(struct core_mmu *);
+uint8_t core_mmu_rb_fetch(struct core_mmu *);
 int core_mmu_wb_send(struct core_mmu *, uint16_t, uint8_t);
 
 int core_mmu_rw_send(struct core_mmu *, uint16_t);
-uint16_t core_mmu_rw_read(struct core_mmu *);
+uint16_t core_mmu_rw_fetch(struct core_mmu *);
 int core_mmu_ww_send(struct core_mmu *, uint16_t, uint16_t);
 
 void core_mmu_update(struct core_mmu *);
+
+inline int core_mmu_pending_rw(struct core_mmu *mmu)
+{
+    return mmu->pending != MMU_NONE;
+}
 
 #endif
 

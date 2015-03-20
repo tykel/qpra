@@ -20,6 +20,9 @@
 #define FLAG_N  0x08
 #define FLAG_I  0x10
 
+#define B_HI(x) ((x) >> 8)
+#define B_LO(x) ((x) & 0xff)
+
 /* Instruction structure. */
 struct core_instr
 {

@@ -324,3 +324,64 @@ uint8_t * core_mmu_getbp(struct core_mmu *mmu, uint16_t a)
     return (uint8_t *)core_mmu_getwp(mmu, a);
 }
 
+
+int core_mmu_rb_send(struct core_mmu *mmu, uint16_t a)
+{
+    mmu->pending = MMU_READ;
+    mmu->a = a;
+    mmu->vsz = 1;
+    return 1;
+}
+
+uint8_t core_mmu_rb_fetch(struct core_mmu *mmu)
+{
+    return (uint8_t) mmu->v;
+}
+
+int core_mmu_wb_send(struct core_mmu *mmu, uint16_t a, uint8_t v)
+{
+    mmu->pending = MMU_WRITE;
+    mmu->a = a;
+    mmu->v = v;
+    mmu->vsz = 1;
+    return 1;
+}
+
+int core_mmu_rw_send(struct core_mmu *mmu, uint16_t a)
+{
+    mmu->pending = MMU_READ;
+    mmu->a = a;
+    mmu->vsz = 2;
+    return 1;
+}
+
+uint16_t core_mmu_rw_fetch(struct core_mmu *mmu)
+{
+    return mmu->v;
+}
+
+int core_mmu_ww_send(struct core_mmu *mmu, uint16_t a, uint16_t v)
+{
+    mmu->pending = MMU_WRITE;
+    mmu->a = a;
+    mmu->vsz = 2;
+    return 1;
+}
+
+void core_mmu_update(struct core_mmu *mmu)
+{
+    if(mmu->pending == MMU_READ) {
+        if(mmu->vsz == 1)
+            mmu->v = core_mmu_readb(mmu, mmu->a);
+        else
+            mmu->v = core_mmu_readw(mmu, mmu->a);
+    } else if(mmu->pending == MMU_WRITE) {
+        if(mmu->vsz == 1)
+            core_mmu_writeb(mmu, mmu->a, mmu->v);
+        else
+            core_mmu_writew(mmu, mmu->a, mmu->v);
+    }
+
+    mmu->pending = MMU_NONE;
+}
+
