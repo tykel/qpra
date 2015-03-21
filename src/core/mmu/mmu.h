@@ -15,27 +15,37 @@
 
 /* Segments of the address space which we handle. */
 static const uint16_t A_ROM_FIXED = 0x0000;
+static const uint16_t A_ROM_FIXED_END = 0x3fff;
 static const uint16_t A_ROM_SWAP  = 0x4000;
+static const uint16_t A_ROM_SWAP_END = 0x7fff;
 static const uint16_t A_RAM_FIXED = 0x8000;
+static const uint16_t A_RAM_FIXED_END= 0x9fff;
 static const uint16_t A_RAM_SWAP  = 0xa000;
+static const uint16_t A_RAM_SWAP_END = 0xbfff;
 static const uint16_t A_TILE_SWAP = 0xc000;
-static const uint16_t A_TILE_SWAP_END = 0xe000;
+static const uint16_t A_TILE_SWAP_END = 0xdfff;
 static const uint16_t A_VPU_START = 0xe000;
-static const uint16_t A_VPU_END   = 0xec00;
+static const uint16_t A_TILE_BANK_SELECT = 0xeb90;
+static const uint16_t A_VPU_END   = 0xebff;
 static const uint16_t A_APU_START = 0xec00;
-static const uint16_t A_APU_END   = 0xf000;
+static const uint16_t A_DPCM_BANK_SELECT = 0xecf0;
+static const uint16_t A_APU_END   = 0xefff;
 static const uint16_t A_DPCM_SWAP = 0xf000;
-static const uint16_t A_DPCM_SWAP_END = 0xf800;
+static const uint16_t A_DPCM_SWAP_END = 0xf7ff;
 static const uint16_t A_CART_FIXED = 0xfe00;
-static const uint16_t A_CART_FIXED_END = 0xff00;
+static const uint16_t A_CART_FIXED_END = 0xfeff;
 static const uint16_t A_ROM_BANK_SELECT = 0xffe0;
 static const uint16_t A_RAM_BANK_SELECT = 0xffe1;
 static const uint16_t A_HIRES_CTR = 0xffe2;
-static const uint16_t A_HIRES_CTR_END = 0xffe6;
+static const uint16_t A_HIRES_CTR_END = 0xffe5;
 static const uint16_t A_PAD1_REG = 0xfff0;
+static const uint16_t A_PAD1_REG_END = 0xfff1;
 static const uint16_t A_PAD2_REG = 0xfff2;
+static const uint16_t A_PAD2_REG_END = 0xfff3;
 static const uint16_t A_SERIAL_REG = 0xfff4;
+static const uint16_t A_SERIAL_REG_END = 0xfff7;
 static const uint16_t A_INT_VEC = 0xfff8;
+static const uint16_t A_END = 0xffff;
 
 /* Memory bank names, for the core_mmu_bank_select function. */ 
 enum core_mmu_bank 
@@ -141,7 +151,7 @@ int core_mmu_ww_send(struct core_mmu *, uint16_t, uint16_t);
 
 void core_mmu_update(struct core_mmu *);
 
-inline int core_mmu_pending_rw(struct core_mmu *mmu)
+inline int core_mmu_pending(struct core_mmu *mmu)
 {
     return mmu->pending != MMU_NONE;
 }

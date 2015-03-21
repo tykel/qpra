@@ -212,23 +212,23 @@ int core_mmu_bank_select(struct core_mmu *mmu, enum core_mmu_bank bank,
 uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
 {
     /* Check which memory bank to access, or which handler to use. */
-    if(a < A_ROM_SWAP)
+    if(a <= A_ROM_FIXED_END)
         return mmu->rom_f[a];
-    else if(a < A_RAM_FIXED)
+    else if(a <= A_ROM_SWAP_END)
         return mmu->rom_s[a];
-    else if(a < A_RAM_SWAP)
+    else if(a <= A_RAM_FIXED_END)
         return mmu->ram_f[a];
-    else if(a < A_TILE_SWAP)
+    else if(a <= A_RAM_SWAP_END)
         return mmu->ram_s[a];
-    else if(a < A_TILE_SWAP_END)
+    else if(a <= A_TILE_SWAP_END)
         return mmu->tile_s[a];
-    else if(a < A_VPU_END)
+    else if(a <= A_VPU_END)
         return mmu->vpu_readb(a);
-    else if(a < A_APU_END)
+    else if(a <= A_APU_END)
         return mmu->apu_readb(a);
-    else if(a < A_DPCM_SWAP_END)
+    else if(a <= A_DPCM_SWAP_END)
         return mmu->dpcm_s[a];
-    else if(a < A_CART_FIXED_END)
+    else if(a <= A_CART_FIXED_END)
         return mmu->cart_f[a];
     else if(a == A_ROM_BANK_SELECT)
         return mmu->rom_s_bank;
@@ -243,28 +243,42 @@ uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
 void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
 {
     /* Check which memory bank to access, or which handler to use. */
-    if(a < A_ROM_SWAP)
+    if(a <= A_ROM_FIXED_END)
         mmu->rom_f[a] = v;
-    else if(a < A_RAM_FIXED)
+    else if(a <= A_ROM_SWAP_END)
         mmu->rom_s[a] = v;
-    else if(a < A_RAM_SWAP)
+    else if(a <= A_RAM_FIXED_END)
         mmu->ram_f[a] = v;
-    else if(a < A_TILE_SWAP)
+    else if(a <= A_RAM_SWAP_END)
         mmu->ram_s[a] = v;
-    else if(a < A_TILE_SWAP_END)
+    else if(a <= A_TILE_SWAP_END)
         mmu->tile_s[a] = v;
-    else if(a < A_VPU_END)
+    else if(a == A_TILE_BANK_SELECT)
+        core_mmu_bank_select(mmu, B_TILE_SWAP, v);
+    else if(a <= A_VPU_END)
         mmu->vpu_writeb(a, v);
-    else if(a < A_APU_END)
+    else if(a == A_DPCM_BANK_SELECT)
+        core_mmu_bank_select(mmu, B_DPCM_SWAP, v);
+    else if(a <= A_APU_END)
         mmu->apu_writeb(a, v);
-    else if(a < A_DPCM_SWAP_END)
+    else if(a <= A_DPCM_SWAP_END)
         mmu->dpcm_s[a] = v;
-    else if(a < A_CART_FIXED_END)
+    else if(a <= A_CART_FIXED_END)
         mmu->cart_f[a] = v;
-    else if(a < A_ROM_BANK_SELECT)
-        mmu->rom_s_bank = v;
-    else if(a < A_RAM_BANK_SELECT)
-        mmu->ram_s_bank = v;
+    else if(a == A_ROM_BANK_SELECT)
+        core_mmu_bank_select(mmu, B_ROM_SWAP, v);
+    else if(a == A_RAM_BANK_SELECT)
+        core_mmu_bank_select(mmu, B_RAM_SWAP, v);
+    else if(a <= A_HIRES_CTR_END)
+        ;//core_cpu_hrc_write(cpu, v);
+    else if(a <= A_PAD1_REG_END)
+        ;
+    else if(a <= A_PAD2_REG_END)
+        ;
+    else if(a <= A_SERIAL_REG_END)
+        ;
+    else if((uint32_t)a <= A_END)
+        ;
     else {
         LOGW("unhandled address $%04x write", a);
     }
@@ -290,23 +304,23 @@ uint16_t * core_mmu_getwp(struct core_mmu *mmu, uint16_t a)
 {
     uint16_t *p;
     /* Check which memory bank to access, or which handler to use. */
-    if(a < A_ROM_SWAP)
+    if(a <= A_ROM_SWAP)
         p = (uint16_t *)&mmu->rom_f[a];
-    else if(a < A_RAM_FIXED)
+    else if(a <= A_RAM_FIXED)
         p = (uint16_t *)&mmu->rom_s[a];
-    else if(a < A_RAM_SWAP)
+    else if(a <= A_RAM_SWAP)
         p = (uint16_t *)&mmu->ram_f[a];
-    else if(a < A_TILE_SWAP)
+    else if(a <= A_TILE_SWAP)
         p = (uint16_t *)&mmu->ram_s[a];
-    else if(a < A_TILE_SWAP_END)
+    else if(a <= A_TILE_SWAP_END)
         p = (uint16_t *)&mmu->tile_s[a];
-    else if(a < A_VPU_END)
+    else if(a <= A_VPU_END)
         p = (uint16_t *)mmu->vpu_getbp(a);
-    else if(a < A_APU_END)
+    else if(a <= A_APU_END)
         p = (uint16_t *)mmu->apu_getbp(a);
-    else if(a < A_DPCM_SWAP_END)
+    else if(a <= A_DPCM_SWAP_END)
         p = (uint16_t *)&mmu->dpcm_s[a];
-    else if(a < A_CART_FIXED_END)
+    else if(a <= A_CART_FIXED_END)
         p = (uint16_t *)&mmu->cart_f[a];
     else if(a == A_ROM_BANK_SELECT)
         p = (uint16_t *)&mmu->rom_s_bank;

@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O0 -g -std=c99 -I./src -DLOG_LEVEL=1
+CFLAGS=-O0 -g -D_POSIX_C_SOURCE=199309L -std=c99 -I./src -DLOG_LEVEL=1
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 
@@ -13,8 +13,8 @@ MAIN_SRCS_ALL:=$(MAIN_SRCS) log.h
 MAIN_SRCS:=$(addprefix $(SRC)/,$(MAIN_SRCS))
 MAIN_SRCS_ALL:=$(addprefix $(SRC)/,$(MAIN_SRCS_ALL))
 
-CORE_SRCS:=core.c cpu/cpu.c mmu/mmu.c
-CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h mmu/mmu.h
+CORE_SRCS:=core.c cpu/cpu.c cpu/hrc.c mmu/mmu.c
+CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h cpu/hrc.h mmu/mmu.h
 
 CORE_SRCS:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS))
 CORE_SRCS_ALL:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS_ALL))

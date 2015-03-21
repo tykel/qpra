@@ -33,6 +33,12 @@ struct core_instr
 };
 
 struct core_mmu;
+struct core_hrc;
+
+enum core_interrupt
+{
+    INT_NONE, INT_USER_IRQ, INT_TIMER_IRQ, INT_VIDEO_IRQ, INT_AUDIO_IRQ
+};
 
 /* CPU state structure. */
 struct core_cpu
@@ -41,6 +47,10 @@ struct core_cpu
     uint16_t r[NUM_REGS];
     /* Pointer to address space manager. */
     struct core_mmu *mmu;
+    /* Pointer to high resolution counter. */
+    struct core_hrc *hrc;
+
+    enum core_interrupt interrupt;
 
     /* Pointer to current instruction. */
     struct core_instr *i;

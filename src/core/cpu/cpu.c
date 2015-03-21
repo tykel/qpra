@@ -128,10 +128,30 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
     int *c = &cpu->i_cycles;
 
     core_mmu_update(cpu->mmu);
+        
+    /* Handle interrupt if pending. */
+    if(cpu->interrupt != INT_NONE && (cpu->r[R_F] & FLAG_I) && *c == 0) {
+        switch(cpu->interrupt) {
+            case INT_USER_IRQ:
+                cpu->r[R_P] = 0xfffe;
+                break;
+            case INT_TIMER_IRQ:
+                cpu->r[R_P] = 0xfffc;
+                break;
+            case INT_VIDEO_IRQ:
+                cpu->r[R_P] = 0xfffa;
+                break;
+            case INT_AUDIO_IRQ:
+                cpu->r[R_P] = 0xfff8;
+                break;
+        }
+        /* The instruction hasn't "really" started, so skip incrementing c. */
+        return;
+    }
 
     if(*c == 0) {
         memset(&p, 0, sizeof(p));
-        
+            
         core_mmu_rw_send(cpu->mmu, cpu->r[R_P]);
         cpu->r[R_P] += 2;
 
@@ -367,10 +387,10 @@ void core_cpu_i_op_int(struct core_cpu *cpu, struct core_instr_params *p)
     if(cpu->i_cycles == 1) {
         core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
         cpu->r[R_S] -= 2;
+        cpu->interrupt = INT_USER_IRQ;
     } else if(cpu->i_cycles == 2) {
         core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
         cpu->r[R_S] -= 2;
-        cpu->r[R_F] = FLAG_I;
     } else if(cpu->i_cycles == 3) {
         core_mmu_rw_send(cpu->mmu, 0xfffe);
     } else {
@@ -392,6 +412,7 @@ void core_cpu_i_op_rti(struct core_cpu *cpu, struct core_instr_params *p)
         cpu->r[R_F] = core_mmu_rw_fetch(cpu->mmu);
         core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
+        cpu->interrupt = INT_NONE;
     } else {
         cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
     }
