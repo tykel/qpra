@@ -7,6 +7,8 @@
 
 #include <stdlib.h>
 #include "core/mmu/mmu.h"
+#include "core/cpu/cpu.h"
+#include "core/cpu/hrc.h"
 #include "log.h"
 
 int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
@@ -147,6 +149,17 @@ l_malloc_error:
     return 0;
 }
 
+int core_mmu_cpu(struct core_mmu *mmu, struct core_cpu *cpu)
+{
+    if(mmu == NULL) {
+        LOGE("Attempted to set cpu for null mmu");
+        return 0;
+    }
+
+    mmu->cpu = cpu;
+    return 1;
+}
+
 int core_mmu_destroy(struct core_mmu *mmu)
 {
     int i;
@@ -269,9 +282,9 @@ void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
         core_mmu_bank_select(mmu, B_ROM_SWAP, v);
     else if(a == A_RAM_BANK_SELECT)
         core_mmu_bank_select(mmu, B_RAM_SWAP, v);
-    else if(a <= A_HIRES_CTR_END)
-        ;//core_cpu_hrc_write(cpu, v);
-    else if(a <= A_PAD1_REG_END)
+    else if(a == A_HIRES_CTR)
+        core_cpu_hrc_settype(mmu->cpu->hrc, v);
+    else if(a >= A_PAD1_REG && a <= A_PAD1_REG_END)
         ;
     else if(a <= A_PAD2_REG_END)
         ;

@@ -165,7 +165,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         cpu->i->ib0 = B_HI(t);
         cpu->i->ib1 = B_LO(t);
         i = core_cpu_ops[INSTR_OP(cpu->i)];
-        LOGV("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
+        //LOGV("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
         
         /* Nothing else to fetch. */
         if(instr_is_void(cpu->i)) {
@@ -214,9 +214,9 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             cpu->i->db0 = B_HI(t);
             if(instr_has_dw(cpu->i)) {
                 cpu->i->db1 = B_LO(t);
-                LOGV("core.cpu: data = %02x %02x", cpu->i->db0, cpu->i->db1);
+                //LOGV("core.cpu: data = %02x %02x", cpu->i->db0, cpu->i->db1);
             } else {
-                LOGV("core.cpu: data = %02x", cpu->i->db0);
+                //LOGV("core.cpu: data = %02x", cpu->i->db0);
             }
             if(instr_is_op1data(cpu->i)) {
                 p.op1 = (INSTR_AM(cpu->i) == AM_DB) ?

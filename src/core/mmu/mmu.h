@@ -37,7 +37,6 @@ static const uint16_t A_CART_FIXED_END = 0xfeff;
 static const uint16_t A_ROM_BANK_SELECT = 0xffe0;
 static const uint16_t A_RAM_BANK_SELECT = 0xffe1;
 static const uint16_t A_HIRES_CTR = 0xffe2;
-static const uint16_t A_HIRES_CTR_END = 0xffe5;
 static const uint16_t A_PAD1_REG = 0xfff0;
 static const uint16_t A_PAD1_REG_END = 0xfff1;
 static const uint16_t A_PAD2_REG = 0xfff2;
@@ -79,6 +78,9 @@ enum core_mmu_access {
  */
 struct core_mmu
 {
+    struct core_cpu *cpu;
+
+    /* The memory banks. */
     uint8_t *rom_f;
     uint8_t *rom_s;
     uint8_t *ram_f;
@@ -87,6 +89,7 @@ struct core_mmu
     uint8_t *dpcm_s;
     uint8_t *cart_f;
 
+    /* Memory state control ports. */
     uint8_t rom_s_bank;
     uint8_t rom_s_total;
     uint8_t ram_s_bank;
@@ -96,11 +99,13 @@ struct core_mmu
     uint8_t dpcm_bank;
     uint8_t dpcm_s_total;
 
+    /* MDR, MAR and state for read/write requests. */
     enum core_mmu_access pending;
     uint16_t a;
     uint16_t v;
     size_t vsz;
 
+    /* Memory access callbacks for other subsystems. */
     uint8_t (*vpu_readb)(uint16_t);
     void (*vpu_writeb)(uint16_t, uint8_t);
     uint8_t * (*vpu_getbp)(uint16_t);
@@ -121,6 +126,7 @@ static uint8_t *cart_f;
 
 /* Function declarations. */
 int core_mmu_init(struct core_mmu **, struct core_mmu_params *);
+int core_mmu_cpu(struct core_mmu *, struct core_cpu *);
 int core_mmu_destroy(struct core_mmu *);
 
 int core_mmu_bank_select(struct core_mmu *, enum core_mmu_bank, uint8_t);

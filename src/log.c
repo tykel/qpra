@@ -30,12 +30,12 @@ void log_verbose(const char *format, ...)
     va_list arg;
     
     va_start(arg, format);
-    printf("[VRBSE] ");
+    printf("[VERBOSE] ");
     vprintf(format, arg);
     printf("\n");
 
     if(g_uselog) {
-        fprintf(g_logfile, "[VRBSE] ");
+        fprintf(g_logfile, "[VERBOSE] ");
         vfprintf(g_logfile, format, arg);
         fprintf(g_logfile, "\n");
     }
@@ -46,12 +46,12 @@ void log_debug(const char *format, ...)
     va_list arg;
     
     va_start(arg, format);
-    printf("[DEBUG] ");
+    printf("[DEBUG  ] ");
     vprintf(format, arg);
     printf("\n");
 
     if(g_uselog) {
-        fprintf(g_logfile, "[DEBUG] ");
+        fprintf(g_logfile, "[DEBUG  ] ");
         vfprintf(g_logfile, format, arg);
         fprintf(g_logfile, "\n");
     }
@@ -80,12 +80,12 @@ void log_error(const char *format, ...)
     va_list arg;
     
     va_start(arg, format);
-    fprintf(stderr, "[ERROR] ");
+    fprintf(stderr, "[ERROR  ] ");
     vfprintf(stderr, format, arg);
     fprintf(stderr, "\n");
 
     if(g_uselog) {
-        fprintf(g_logfile, "[ERROR] ");
+        fprintf(g_logfile, "[ERROR  ] ");
         vfprintf(g_logfile, format, arg);
         fprintf(g_logfile, "\n");
     }

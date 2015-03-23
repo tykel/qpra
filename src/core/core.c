@@ -55,7 +55,9 @@ void *core_entry(void *data)
 
     LOGD("Beginning emulation");
     while(!done()) {
-        core_cpu_i_instr(core->cpu);
+        for(int i = 0; i < 4; ++i)
+            core_cpu_i_instr(core->cpu);
+        getc(stdin);
     }
     LOGD("Finished emulation");
 
@@ -82,6 +84,8 @@ int core_init(struct core_system *core)
     //core_pad_init(core->pad);
     
     if(!core_cpu_init(&core->cpu, core->mmu))
+        return 0;
+    if(!core_mmu_cpu(core->mmu, core->cpu))
         return 0;
     
     LOGD("Core initialized");
