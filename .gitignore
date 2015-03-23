@@ -1,6 +1,10 @@
+.gitignore
 *.so
 qpra
+TODO
+test.kpr
 tags
+backup/*
 src/*.o
 src/core/*.o
 src/ui/*.o
