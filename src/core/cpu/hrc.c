@@ -28,6 +28,8 @@ int hrc_us[] = {
     -1, -1
 };
 
+
+/* Update the elapsed and remaining time value for the HRC. */
 static inline void core_cpu_hrc__diff(struct core_hrc *hrc)
 {
     int old_us = hrc->elapsed_us;
@@ -41,16 +43,22 @@ static inline void core_cpu_hrc__diff(struct core_hrc *hrc)
     }
 }
 
+
+/* Signal an interrupt request (IRQ) for the next instruction. */
 static inline void core_cpu_hrc__trigger_int(struct core_cpu *cpu)
 {
     cpu->interrupt = INT_TIMER_IRQ;
 }
 
+
+/* Initialize the HRC state: simply zero all variables. */
 void core_cpu_hrc_init(struct core_cpu *cpu)
 {
     memset(cpu->hrc, 0, sizeof(struct core_hrc));
 }
 
+
+/* Step forward one time unit, and update. Will fire an interrupt if ready. */
 void core_cpu_hrc_step(struct core_cpu *cpu)
 {
     struct core_hrc *hrc = cpu->hrc;
@@ -73,6 +81,11 @@ void core_cpu_hrc_step(struct core_cpu *cpu)
     }
 }
 
+
+/* 
+ * Set the timer mode, enabling it if the mode is not DISABLED.
+ * Resets the HRC state.
+ */
 void core_cpu_hrc_settype(struct core_hrc *hrc, int type)
 {
     switch(type) {
@@ -97,6 +110,8 @@ void core_cpu_hrc_settype(struct core_hrc *hrc, int type)
     hrc->v = hrc_use_rtc ? hrc_us[hrc->type] : hrc_cycles[hrc->type];
 }
 
+
+/* Return the currently used counter mode. */
 int core_cpu_hrc_gettype(struct core_hrc *hrc)
 {
     return hrc->type;

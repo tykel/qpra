@@ -14,12 +14,17 @@
 
 static const int CPU_FREQ_HZ = 3932160;
 
+/* HRC modes. Several modes map to DISABLED. */
 enum core_hrc_type {
     HRC_DISABLED = 0,
     HRC_60HZ, HRC_120HZ, HRC_240HZ, HRC_480HZ, HRC_960HZ,
     HRC_DISABLED6, HRC_DISABLED7
 };
 
+/* 
+ * Hi-Res Counter structure.
+ * Tracks timer mode, and start and elapsed time.
+ */
 struct core_hrc {
     uint8_t v;
 
@@ -31,8 +36,8 @@ struct core_hrc {
     struct timespec cur;
 };
 
+/* Function declarations. */
 void core_cpu_hrc_init(struct core_cpu *);
-
 void core_cpu_hrc_step(struct core_cpu *);
 void core_cpu_hrc_settype(struct core_hrc *, int);
 int core_cpu_hrc_gettype(struct core_hrc *);

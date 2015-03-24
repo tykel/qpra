@@ -14,6 +14,7 @@
 
 extern int hrc_use_rtc;
 
+/* Map of instruction opcode names to strings, for logging. */
 static char *instrnam[NUM_INSTRS] = {
     "nop", /* 00 */
     "int", /* 01 */
@@ -49,6 +50,8 @@ static char *instrnam[NUM_INSTRS] = {
     "xor"  /* 1f */
 };
 
+
+/* Initialize the CPU state. Sets up the opcode jump table. */
 int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
 {
     struct core_cpu *cpu;
@@ -107,6 +110,8 @@ int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
     return 1;
 }
 
+
+/* Destroys the core_cpu structure, freeing its memory. */ 
 void core_cpu_destroy(struct core_cpu *cpu)
 {
     free(cpu);
@@ -351,8 +356,6 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
 }
 
 /*
- * core_cpu_i_instr
- *
  * Execute all the cycles for the current instruction.
  */
 void core_cpu_i_instr(struct core_cpu *cpu)
@@ -685,6 +688,11 @@ void core_cpu_i_op_sub(struct core_cpu *cpu, struct core_instr_params *p)
         ((temp < 0) << 3);             /* N */
 }
 
+/*
+ * core_cpu_i_op_mul
+ *
+ * MUL instruction implementation.
+ */
 void core_cpu_i_op_mul(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 * p->op2;
@@ -696,6 +704,11 @@ void core_cpu_i_op_mul(struct core_cpu *cpu, struct core_instr_params *p)
         ((temp < 0) << 3);             /* N */
 }
 
+/*
+ * core_cpu_i_op_div
+ *
+ * DIV instruction implementation.
+ */
 void core_cpu_i_op_div(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 / p->op2;
@@ -707,6 +720,11 @@ void core_cpu_i_op_div(struct core_cpu *cpu, struct core_instr_params *p)
         ((temp < 0) << 3);             /* N */
 }
 
+/*
+ * core_cpu_i_op_lsl
+ *
+ * LSL instruction implementation.
+ */
 void core_cpu_i_op_lsl(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 << p->op2;
@@ -718,6 +736,11 @@ void core_cpu_i_op_lsl(struct core_cpu *cpu, struct core_instr_params *p)
             ((temp < 0) << 3);          /* N */
 }
 
+/*
+ * core_cpu_i_op_lsr
+ *
+ * LSR instruction implementation.
+ */
 void core_cpu_i_op_lsr(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 >> p->op2;
@@ -729,6 +752,11 @@ void core_cpu_i_op_lsr(struct core_cpu *cpu, struct core_instr_params *p)
             ((temp < 0) << 3);          /* N */
 }
 
+/*
+ * core_cpu_i_op_asr
+ *
+ * ASR instruction implementation.
+ */
 void core_cpu_i_op_asr(struct core_cpu *cpu, struct core_instr_params *p)
 {
     int16_t temp = *(int16_t *)&p->op1 >> *(int16_t *)&p->op2;
@@ -740,6 +768,11 @@ void core_cpu_i_op_asr(struct core_cpu *cpu, struct core_instr_params *p)
             ((temp < 0) << 3);          /* N */
 }
 
+/*
+ * core_cpu_i_op_and
+ *
+ * AND instruction implementation.
+ */
 void core_cpu_i_op_and(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 & p->op2;
@@ -751,6 +784,11 @@ void core_cpu_i_op_and(struct core_cpu *cpu, struct core_instr_params *p)
             ((temp < 0) << 3);          /* N */
 }
 
+/*
+ * core_cpu_i_op_or
+ *
+ * OR instruction implementation.
+ */
 void core_cpu_i_op_or(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 | p->op2;
@@ -762,6 +800,11 @@ void core_cpu_i_op_or(struct core_cpu *cpu, struct core_instr_params *p)
             ((temp < 0) << 3);          /* N */
 }
 
+/*
+ * core_cpu_i_op_xor
+ *
+ * XOR instruction implementation.
+ */
 void core_cpu_i_op_xor(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 ^ p->op2;

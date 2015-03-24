@@ -24,6 +24,18 @@ static uint8_t *cart_f;
 static uint8_t *fixed0_f;
 static uint8_t *fixed1_f;
 
+/* Private functions. */
+static uint8_t core_mmu_readb(struct core_mmu *, uint16_t);
+static void core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
+static uint16_t core_mmu_readw(struct core_mmu *, uint16_t);
+static void core_mmu_writew(struct core_mmu *, uint16_t, uint16_t);
+
+/*
+ * Initialize the MMU.
+ * Allocates memory for the core_mmu structure, and for each of the memory
+ * buffers it owns.
+ * Sets up callbacks for I/O which redirects to another system component.
+ */
 int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
 {
     int i;
@@ -173,6 +185,13 @@ l_malloc_error:
     return 0;
 }
 
+
+/* 
+ * Set the internal pointer to the core_cpu structure.
+ * This is separate from the _init function since the cpu init function
+ * requires a pointer to a valid core_mmu structure. Hence, MMU setup is done
+ * in two steps.
+ */
 int core_mmu_cpu(struct core_mmu *mmu, struct core_cpu *cpu)
 {
     if(mmu == NULL) {
@@ -184,6 +203,11 @@ int core_mmu_cpu(struct core_mmu *mmu, struct core_cpu *cpu)
     return 1;
 }
 
+
+/* 
+ * Destroy the MMU state.
+ * Frees all the memory buffers it owns.
+ */
 int core_mmu_destroy(struct core_mmu *mmu)
 {
     int i;
@@ -222,6 +246,12 @@ int core_mmu_destroy(struct core_mmu *mmu)
     return 1;
 }
 
+
+/* 
+ * Select the bank index for a specific memory bank.
+ * Causes the correct bank to be switched in, and the previous one switched
+ * out.
+ */
 int core_mmu_bank_select(struct core_mmu *mmu, enum core_mmu_bank bank,
                          uint8_t index)
 {
@@ -246,7 +276,91 @@ int core_mmu_bank_select(struct core_mmu *mmu, enum core_mmu_bank bank,
     return 1;
 }
 
-uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
+
+/* Place a Read-Byte request on the bus. */
+int core_mmu_rb_send(struct core_mmu *mmu, uint16_t a)
+{
+    mmu->pending = MMU_READ;
+    mmu->a = a;
+    mmu->vsz = 1;
+    return 1;
+}
+
+
+/* Return the result of the Read-Byte request from the MDR. */
+uint8_t core_mmu_rb_fetch(struct core_mmu *mmu)
+{
+    return (uint8_t) mmu->v;
+}
+
+
+/* Place a Write-Byte request on the bus. */
+int core_mmu_wb_send(struct core_mmu *mmu, uint16_t a, uint8_t v)
+{
+    mmu->pending = MMU_WRITE;
+    mmu->a = a;
+    mmu->v = v;
+    mmu->vsz = 1;
+    return 1;
+}
+
+
+/* Place a Read-Word request on the bus. */
+int core_mmu_rw_send(struct core_mmu *mmu, uint16_t a)
+{
+    mmu->pending = MMU_READ;
+    mmu->a = a;
+    mmu->vsz = 2;
+    return 1;
+}
+
+
+/* Return the result of the Read-Word request from the MDR. */
+uint16_t core_mmu_rw_fetch(struct core_mmu *mmu)
+{
+    return mmu->v;
+}
+
+
+/* Place a Write-Word request on the bus. */
+int core_mmu_ww_send(struct core_mmu *mmu, uint16_t a, uint16_t v)
+{
+    mmu->pending = MMU_WRITE;
+    mmu->a = a;
+    mmu->vsz = 2;
+    return 1;
+}
+
+
+/* Apply any pending memory operations on the bus. */
+void core_mmu_update(struct core_mmu *mmu)
+{
+    if(mmu->pending == MMU_READ) {
+        if(mmu->vsz == 1)
+            mmu->v = core_mmu_readb(mmu, mmu->a);
+        else
+            mmu->v = core_mmu_readw(mmu, mmu->a);
+    } else if(mmu->pending == MMU_WRITE) {
+        if(mmu->vsz == 1)
+            core_mmu_writeb(mmu, mmu->a, mmu->v);
+        else
+            core_mmu_writew(mmu, mmu->a, mmu->v);
+    }
+
+    mmu->pending = MMU_NONE;
+}
+
+
+/*---------------------------------------------------------------------------*/
+
+/* Check for a pending memory access. */
+static inline int core_mmu_pending(struct core_mmu *mmu)
+{
+    return mmu->pending != MMU_NONE;
+}
+
+/* Read a byte from the correct device/bank for that address. */
+static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
 {
     /* Check which memory bank to access, or which handler to use. */
     if(a <= A_ROM_FIXED_END)
@@ -287,7 +401,9 @@ uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
     }
 }
 
-void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
+
+/* Write a byte to the correct device/bank part for that address. */
+static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
 {
     /* Check which memory bank to access, or which handler to use. */
     if(a <= A_ROM_FIXED_END)
@@ -331,7 +447,9 @@ void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     }
 }
 
-uint16_t core_mmu_readw(struct core_mmu *mmu, uint16_t a)
+
+/* Read a word from the correct device/bank part for that address. */
+static uint16_t core_mmu_readw(struct core_mmu *mmu, uint16_t a)
 {
     uint16_t result = 0;
 
@@ -341,70 +459,11 @@ uint16_t core_mmu_readw(struct core_mmu *mmu, uint16_t a)
     return result;
 }
 
-void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint16_t v)
+
+/* Write a word to the correct device/bank part for that address. */
+static void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint16_t v)
 {
     core_mmu_writeb(mmu, a, (v >> 8));
     core_mmu_writeb(mmu, a + 1, v & 0xff);
-}
-
-
-int core_mmu_rb_send(struct core_mmu *mmu, uint16_t a)
-{
-    mmu->pending = MMU_READ;
-    mmu->a = a;
-    mmu->vsz = 1;
-    return 1;
-}
-
-uint8_t core_mmu_rb_fetch(struct core_mmu *mmu)
-{
-    return (uint8_t) mmu->v;
-}
-
-int core_mmu_wb_send(struct core_mmu *mmu, uint16_t a, uint8_t v)
-{
-    mmu->pending = MMU_WRITE;
-    mmu->a = a;
-    mmu->v = v;
-    mmu->vsz = 1;
-    return 1;
-}
-
-int core_mmu_rw_send(struct core_mmu *mmu, uint16_t a)
-{
-    mmu->pending = MMU_READ;
-    mmu->a = a;
-    mmu->vsz = 2;
-    return 1;
-}
-
-uint16_t core_mmu_rw_fetch(struct core_mmu *mmu)
-{
-    return mmu->v;
-}
-
-int core_mmu_ww_send(struct core_mmu *mmu, uint16_t a, uint16_t v)
-{
-    mmu->pending = MMU_WRITE;
-    mmu->a = a;
-    mmu->vsz = 2;
-    return 1;
-}
-
-void core_mmu_update(struct core_mmu *mmu)
-{
-    if(mmu->pending == MMU_READ) {
-        if(mmu->vsz == 1)
-            mmu->v = core_mmu_readb(mmu, mmu->a);
-        else
-            mmu->v = core_mmu_readw(mmu, mmu->a);
-    } else if(mmu->pending == MMU_WRITE) {
-        if(mmu->vsz == 1)
-            core_mmu_writeb(mmu, mmu->a, mmu->v);
-        else
-            core_mmu_writew(mmu, mmu->a, mmu->v);
-    }
-
-    mmu->pending = MMU_NONE;
 }
 

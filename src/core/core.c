@@ -27,6 +27,11 @@ struct arg_pair
     char **argv;
 };
 
+
+/*
+ * Emulation thread entry point.
+ * Parses the command line, loads the ROM (if any) and begins emulation.
+ */
 void *core_entry(void *data)
 {
     struct core_system *core;
@@ -64,6 +69,11 @@ void *core_entry(void *data)
     LOGD("Emulation core thread exiting");
 }
 
+
+/* 
+ * Top-level initialization routine.
+ * Initializes the various devices in core_system, turn by turn.
+ */
 int core_init(struct core_system *core)
 {
     struct core_mmu_params mmup;
@@ -92,6 +102,8 @@ int core_init(struct core_system *core)
     return 1;
 }
 
+
+/* Reads and parses the ROM from disk. */
 int core_load_rom(struct core_system *core, const char *fn)
 {
     struct core_header_map *map;

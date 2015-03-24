@@ -129,12 +129,6 @@ int core_mmu_destroy(struct core_mmu *);
 
 int core_mmu_bank_select(struct core_mmu *, enum core_mmu_bank, uint8_t);
 
-uint8_t core_mmu_readb(struct core_mmu *, uint16_t);
-void core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
-
-uint16_t core_mmu_readw(struct core_mmu *, uint16_t);
-void core_mmu_writew(struct core_mmu *, uint16_t, uint16_t);
-
 /*
  * Emulate 1-cycle memory access delay by using a two-step access: in cycle 0,
  * send a read request for a given address; in cycle 1, read the result (from
@@ -152,10 +146,11 @@ int core_mmu_ww_send(struct core_mmu *, uint16_t, uint16_t);
 
 void core_mmu_update(struct core_mmu *);
 
-inline int core_mmu_pending(struct core_mmu *mmu)
-{
-    return mmu->pending != MMU_NONE;
-}
+/* Private functions. */
+static uint8_t core_mmu_readb(struct core_mmu *, uint16_t);
+static void core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
+static uint16_t core_mmu_readw(struct core_mmu *, uint16_t);
+static void core_mmu_writew(struct core_mmu *, uint16_t, uint16_t);
 
 #endif
 
