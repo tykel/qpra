@@ -13,8 +13,8 @@ MAIN_SRCS_ALL:=$(MAIN_SRCS) log.h
 MAIN_SRCS:=$(addprefix $(SRC)/,$(MAIN_SRCS))
 MAIN_SRCS_ALL:=$(addprefix $(SRC)/,$(MAIN_SRCS_ALL))
 
-CORE_SRCS:=core.c cpu/cpu.c cpu/hrc.c mmu/mmu.c
-CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h cpu/hrc.h mmu/mmu.h
+CORE_SRCS:=core.c cpu/cpu.c cpu/hrc.c mmu/mmu.c vpu/vpu.c
+CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h cpu/hrc.h mmu/mmu.h vpu/vpu.h
 
 CORE_SRCS:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS))
 CORE_SRCS_ALL:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS_ALL))

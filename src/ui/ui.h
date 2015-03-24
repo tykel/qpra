@@ -50,6 +50,8 @@ void ui_init(int, char **);
 struct ui_window * ui_window_new(void);
 void ui_run(struct ui_window*);
 
+void *ui_get_fb(void);
+
 extern struct ui_window *window;
 
 #endif

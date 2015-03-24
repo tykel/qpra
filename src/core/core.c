@@ -13,7 +13,7 @@
 #include "core/core.h"
 #include "core/cpu/cpu.h"
 //#include "core/apu/apu.h"
-//#include "core/vpu/vpu.h"
+#include "core/vpu/vpu.h"
 #include "core/mmu/mmu.h"
 //#include "core/cart/cart.h"
 //#include "core/pad/pad.h"
@@ -78,9 +78,6 @@ int core_init(struct core_system *core)
 {
     struct core_mmu_params mmup;
     
-    //core_apu_init(core->apu);
-    //core_vpu_init(core->vpu);
-    
     mmup.rom_banks = core->header->rom_banks;
     mmup.ram_banks = core->header->ram_banks;
     mmup.tile_banks = core->header->tile_banks;
@@ -90,13 +87,15 @@ int core_init(struct core_system *core)
     if(!core_mmu_init(&core->mmu, &mmup))
         return 0;
     
-    //core_cart_init(core->cart);
-    //core_pad_init(core->pad);
-    
     if(!core_cpu_init(&core->cpu, core->mmu))
         return 0;
     if(!core_mmu_cpu(core->mmu, core->cpu))
         return 0;
+    if(!core_vpu_init(&core->vpu, core->cpu))
+        return 0;
+    //core_apu_init(core->apu);
+    //core_cart_init(core->cart);
+    //core_pad_init(core->pad);
     
     LOGD("Core initialized");
     return 1;
