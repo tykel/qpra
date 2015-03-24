@@ -35,6 +35,7 @@ void core_cpu_hrc_init(struct core_cpu *);
 
 void core_cpu_hrc_step(struct core_cpu *);
 void core_cpu_hrc_settype(struct core_hrc *, int);
+int core_cpu_hrc_gettype(struct core_hrc *);
 
 #endif
 

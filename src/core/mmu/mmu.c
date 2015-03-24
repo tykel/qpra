@@ -6,10 +6,23 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
+
 #include "core/mmu/mmu.h"
 #include "core/cpu/cpu.h"
 #include "core/cpu/hrc.h"
 #include "log.h"
+
+/* Static memory banks. */
+static uint8_t *rom_f;
+static uint8_t **rom_s;
+static uint8_t *ram_f;
+static uint8_t **ram_s;
+static uint8_t **tile_s;
+static uint8_t **dpcm_s;
+static uint8_t *cart_f;
+static uint8_t *fixed0_f;
+static uint8_t *fixed1_f;
 
 int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
 {
@@ -41,6 +54,17 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
     if(cart_f == NULL)
         goto l_malloc_error;
     mmu->cart_f = cart_f;
+
+    /* Allocate the two banks for misc. use at address space end. */
+    fixed0_f = calloc(6*256, sizeof(uint8_t));
+    fixed1_f = calloc(256, sizeof(uint8_t));
+    if(fixed0_f == NULL || fixed1_f == NULL)
+        goto l_malloc_error;
+    mmu->fixed0_f = fixed0_f;
+    mmu->fixed1_f = fixed1_f;
+
+    /* Clear the interrupt vector. */
+    memset(mmu->intvec, 0, sizeof(mmu->intvec));
 
     /* Allocate the switchable ROM banks. */
     if(params->rom_banks == 0) {
@@ -170,6 +194,10 @@ int core_mmu_destroy(struct core_mmu *mmu)
     mmu->ram_f = ram_f = NULL;
     free(cart_f);
     mmu->cart_f = cart_f = NULL;
+    free(fixed0_f);
+    mmu->fixed0_f = fixed0_f = NULL;
+    free(fixed1_f);
+    mmu->fixed1_f = fixed1_f = NULL;
 
     for(i = 0; i < mmu->rom_s_total; ++i)
         free(rom_s[i]);
@@ -198,10 +226,6 @@ int core_mmu_bank_select(struct core_mmu *mmu, enum core_mmu_bank bank,
                          uint8_t index)
 {
     switch(bank) {
-        case B_ROM_FIXED:
-        case B_RAM_FIXED:
-            LOGE("Attempted to switch fixed memory bank");
-            return 0;
         case B_ROM_SWAP:
             mmu->rom_s_bank = index;
             mmu->rom_s = rom_s[index];
@@ -247,8 +271,18 @@ uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
         return mmu->rom_s_bank;
     else if(a == A_RAM_BANK_SELECT)
         return mmu->ram_s_bank;
+    else if(a == A_HIRES_CTR)
+        return core_cpu_hrc_gettype(mmu->cpu->hrc);
+    else if(a <= A_SERIAL_REG_END)
+        LOGV("core.mmu: write @ address $%04x: serial stub", a);
+    else if(a >= A_PAD1_REG && a <= A_PAD1_REG_END)
+        LOGV("core.mmu: read  @ address $%04x: gamepad stub", a);
+    else if(a >= A_PAD2_REG && a <= A_PAD2_REG_END)
+        LOGV("core.mmu: read  @ address $%04x: gamepad stub", a);
+    else if((uint32_t)a <= A_INT_VEC)
+        return mmu->intvec[a];
     else {
-        LOGW("unhandled address $%04x read", a);
+        LOGW("core.mmu: read  @ address $%04x: unhandled", a);
         return 0;
     }
 }
@@ -276,24 +310,24 @@ void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
         mmu->apu_writeb(a, v);
     else if(a <= A_DPCM_SWAP_END)
         mmu->dpcm_s[a] = v;
+    else if(a <= A_FIXED0_END)
+        LOGW("core.mmu: write @ address $%04x: unhandled", a);
     else if(a <= A_CART_FIXED_END)
         mmu->cart_f[a] = v;
+    else if(a <= A_FIXED1_END)
+        LOGW("core.mmu: write @ address $%04x: unhandled", a);
     else if(a == A_ROM_BANK_SELECT)
         core_mmu_bank_select(mmu, B_ROM_SWAP, v);
     else if(a == A_RAM_BANK_SELECT)
         core_mmu_bank_select(mmu, B_RAM_SWAP, v);
     else if(a == A_HIRES_CTR)
         core_cpu_hrc_settype(mmu->cpu->hrc, v);
-    else if(a >= A_PAD1_REG && a <= A_PAD1_REG_END)
-        ;
-    else if(a <= A_PAD2_REG_END)
-        ;
     else if(a <= A_SERIAL_REG_END)
-        ;
-    else if((uint32_t)a <= A_END)
-        ;
+        LOGV("core.mmu: write @ address $%04x: serial stub", a);
+    else if((uint32_t)a <= A_INT_VEC)
+        mmu->intvec[a] = v;
     else {
-        LOGW("unhandled address $%04x write", a);
+        LOGW("core.mmu: write @ address $%04x: unhandled", a);
     }
 }
 
@@ -311,44 +345,6 @@ void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint16_t v)
 {
     core_mmu_writeb(mmu, a, (v >> 8));
     core_mmu_writeb(mmu, a + 1, v & 0xff);
-}
-
-uint16_t * core_mmu_getwp(struct core_mmu *mmu, uint16_t a)
-{
-    uint16_t *p;
-    /* Check which memory bank to access, or which handler to use. */
-    if(a <= A_ROM_SWAP)
-        p = (uint16_t *)&mmu->rom_f[a];
-    else if(a <= A_RAM_FIXED)
-        p = (uint16_t *)&mmu->rom_s[a];
-    else if(a <= A_RAM_SWAP)
-        p = (uint16_t *)&mmu->ram_f[a];
-    else if(a <= A_TILE_SWAP)
-        p = (uint16_t *)&mmu->ram_s[a];
-    else if(a <= A_TILE_SWAP_END)
-        p = (uint16_t *)&mmu->tile_s[a];
-    else if(a <= A_VPU_END)
-        p = (uint16_t *)mmu->vpu_getbp(a);
-    else if(a <= A_APU_END)
-        p = (uint16_t *)mmu->apu_getbp(a);
-    else if(a <= A_DPCM_SWAP_END)
-        p = (uint16_t *)&mmu->dpcm_s[a];
-    else if(a <= A_CART_FIXED_END)
-        p = (uint16_t *)&mmu->cart_f[a];
-    else if(a == A_ROM_BANK_SELECT)
-        p = (uint16_t *)&mmu->rom_s_bank;
-    else if(a == A_RAM_BANK_SELECT)
-        p = (uint16_t *)&mmu->ram_s_bank;
-    else {
-        LOGW("unhandled address $%04x read", a);
-        p = NULL;
-    }
-    return p;
-}
-
-uint8_t * core_mmu_getbp(struct core_mmu *mmu, uint16_t a)
-{
-    return (uint8_t *)core_mmu_getwp(mmu, a);
 }
 
 

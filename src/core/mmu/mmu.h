@@ -32,8 +32,12 @@ static const uint16_t A_DPCM_BANK_SELECT = 0xecf0;
 static const uint16_t A_APU_END   = 0xefff;
 static const uint16_t A_DPCM_SWAP = 0xf000;
 static const uint16_t A_DPCM_SWAP_END = 0xf7ff;
+static const uint16_t A_FIXED0_START = 0xf800;
+static const uint16_t A_FIXED0_END = 0xfdff;
 static const uint16_t A_CART_FIXED = 0xfe00;
 static const uint16_t A_CART_FIXED_END = 0xfeff;
+static const uint16_t A_FIXED1_START = 0xff00;
+static const uint16_t A_FIXED1_END = 0xffdf;
 static const uint16_t A_ROM_BANK_SELECT = 0xffe0;
 static const uint16_t A_RAM_BANK_SELECT = 0xffe1;
 static const uint16_t A_HIRES_CTR = 0xffe2;
@@ -49,7 +53,7 @@ static const uint16_t A_END = 0xffff;
 /* Memory bank names, for the core_mmu_bank_select function. */ 
 enum core_mmu_bank 
 {
-    B_ROM_FIXED, B_ROM_SWAP, B_RAM_FIXED, B_RAM_SWAP, B_TILE_SWAP, B_DPCM_SWAP
+    B_ROM_SWAP, B_RAM_SWAP, B_TILE_SWAP, B_DPCM_SWAP
 };
 
 /* Metadata about the memory layout of a particular cartridge. */
@@ -87,7 +91,10 @@ struct core_mmu
     uint8_t *ram_s;
     uint8_t *tile_s;
     uint8_t *dpcm_s;
+    uint8_t *fixed0_f;
     uint8_t *cart_f;
+    uint8_t *fixed1_f;
+    uint8_t intvec[8];
 
     /* Memory state control ports. */
     uint8_t rom_s_bank;
@@ -115,15 +122,6 @@ struct core_mmu
     uint8_t * (*apu_getbp)(uint16_t);
 };
 
-/* Static memory banks. */
-static uint8_t *rom_f;
-static uint8_t **rom_s;
-static uint8_t *ram_f;
-static uint8_t **ram_s;
-static uint8_t **tile_s;
-static uint8_t **dpcm_s;
-static uint8_t *cart_f;
-
 /* Function declarations. */
 int core_mmu_init(struct core_mmu **, struct core_mmu_params *);
 int core_mmu_cpu(struct core_mmu *, struct core_cpu *);
@@ -136,9 +134,6 @@ void core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
 
 uint16_t core_mmu_readw(struct core_mmu *, uint16_t);
 void core_mmu_writew(struct core_mmu *, uint16_t, uint16_t);
-
-uint16_t * core_mmu_getwp(struct core_mmu *, uint16_t);
-uint8_t * core_mmu_getbp(struct core_mmu *, uint16_t);
 
 /*
  * Emulate 1-cycle memory access delay by using a two-step access: in cycle 0,

@@ -30,7 +30,7 @@ LIBS+=$(shell sdl2-config --libs)
 
 .PHONY: all
 
-all: qpra write_kpr
+all: qpra test.kpr
 
 qpra: $(MAIN_SRCS_ALL) libcore.so libui.so
 	$(CC) $(CFLAGS) $(MAIN_SRCS) -o $@ $(LIBS) -Wl,-rpath,. -L. -lcore -lui
@@ -41,5 +41,5 @@ libcore.so: $(CORE_SRCS_ALL)
 libui.so: $(UI_SRCS_ALL)
 	$(CC) $(CFLAGS) -fPIC $(UI_SRCS) -shared -o $@
 
-write_kpr: write_kpr.c
-	$(CC) -O2 $< -o $@
+test.kpr: test.s
+	./as.py $<

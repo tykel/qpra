@@ -8,8 +8,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include "core/cpu/cpu.h"
+#include "core/cpu/hrc.h"
 #include "core/mmu/mmu.h"
 #include "log.h"
+
+extern int hrc_use_rtc;
 
 static char *instrnam[NUM_INSTRS] = {
     "nop", /* 00 */
@@ -127,7 +130,12 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
     static void (*i)(struct core_cpu *, struct core_instr_params *);
     int *c = &cpu->i_cycles;
 
+    /* Apply any pending read/write requests on the bus. */
     core_mmu_update(cpu->mmu);
+
+    /* If we are using cpu cycles for the timer, do it here. */
+    if(!hrc_use_rtc)
+        core_cpu_hrc_step(cpu);
         
     /* Handle interrupt if pending. */
     if(cpu->interrupt != INT_NONE && (cpu->r[R_F] & FLAG_I) && *c == 0) {
@@ -149,6 +157,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         return;
     }
 
+    /* Each cycle has a state machine for every type of instruction. */
     if(*c == 0) {
         memset(&p, 0, sizeof(p));
             

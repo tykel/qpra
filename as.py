@@ -1,5 +1,10 @@
 #!/bin/env python2
 
+# as.py -- Assembler
+#
+# Simple Python script to convert Khepra assembly programs into
+# working ROMs loadable by qpra and other emulators as per the specification.
+
 import sys
 import re
 import struct
@@ -198,7 +203,7 @@ def main():
 
     f = open(romname, "wb")
     f.write(magic)
-    f.write(struct.pack('I', 83))
+    f.write(struct.pack('I', 16*1024))
     f.write(struct.pack('I', 0))
     f.write(struct.pack('B', 1))
     f.write(struct.pack('B', 1))
@@ -262,7 +267,9 @@ def main():
                     #print 'output b = ', hex(b)
                     f.write(struct.pack('B', b))
                     c += 1
-
+    while c-68 < 16*1024:
+        f.write(struct.pack('B', 0))
+        c += 1
 
     f.close()
 
