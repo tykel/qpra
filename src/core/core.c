@@ -21,6 +21,8 @@
 
 int done();
 
+const char *palette_fn = "palette.bin";
+
 struct arg_pair
 {
     int argc;
@@ -60,8 +62,11 @@ void *core_entry(void *data)
 
     LOGD("Beginning emulation");
     while(!done()) {
-        for(int i = 0; i < 4; ++i)
+        for(int i = 0; i < 4; ++i) {
             core_cpu_i_instr(core->cpu);
+            core_vpu_update(core->vpu);
+            core_vpu_write_fb(core->vpu);
+        }
         getc(stdin);
     }
     LOGD("Finished emulation");
@@ -77,6 +82,7 @@ void *core_entry(void *data)
 int core_init(struct core_system *core)
 {
     struct core_mmu_params mmup;
+    uint8_t palette[768];
     
     mmup.rom_banks = core->header->rom_banks;
     mmup.ram_banks = core->header->ram_banks;
@@ -92,6 +98,10 @@ int core_init(struct core_system *core)
     if(!core_mmu_cpu(core->mmu, core->cpu))
         return 0;
     if(!core_vpu_init(&core->vpu, core->cpu))
+        return 0;
+    if(!core_load_palette(core, palette))
+        return 0;
+    if(!core_vpu_init_palette(core->vpu, palette))
         return 0;
     //core_apu_init(core->apu);
     //core_cart_init(core->cart);
@@ -135,6 +145,29 @@ int core_load_rom(struct core_system *core, const char *fn)
 
     core->header = map;
 
+    return 1;
+}
+
+
+/* Read the palette into memory for the VPU. */
+int core_load_palette(struct core_system *core, uint8_t *buffer)
+{
+    int n;
+    FILE *fp = NULL;
+    
+    fp = fopen(palette_fn, "rb");
+    if(fp == NULL) {
+        LOGE("Couldn't open palette in '%s'", palette_fn);
+        return 0;
+    }
+    n = fread(buffer, 1, 768, fp);
+    if(n != 768) {
+        LOGE("Couldn't read full palette file");
+        return 0;
+    }
+    fclose(fp);
+
+    LOGD("Read in palette file: size: 768");
     return 1;
 }
 

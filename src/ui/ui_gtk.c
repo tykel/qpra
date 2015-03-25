@@ -32,14 +32,16 @@ void ui_init_gtk(int argc, char **argv)
     gtk_init(&argc, &argv);
 
     /* XXX: Create an initial framebuffer texture. */
-    framebuffer = malloc(256 * 224 * 3);
+    pthread_mutex_lock(&fb_lock);
     for(j = 0; j < 224; ++j) {
         for(i = 0; i < 256; ++i) {
-            framebuffer[(j*256 + i) * 3 + 0] = i;
-            framebuffer[(j*256 + i) * 3 + 1] = i;
-            framebuffer[(j*256 + i) * 3 + 2] = i;
+            framebuffer[(j*256 + i) * 4 + 0] = i;
+            framebuffer[(j*256 + i) * 4 + 1] = i;
+            framebuffer[(j*256 + i) * 4 + 2] = i;
+            framebuffer[(j*256 + i) * 4 + 3] = 255;
         }
     }
+    pthread_mutex_unlock(&fb_lock);
 }
 
 struct ui_window * ui_window_new_gtk(void)
@@ -164,7 +166,7 @@ static void ui_gtk_quit_destroy(void)
 {
     if(!done())
         mark_done();
-    free(framebuffer);
+
     free(window);
     exit(0);
 }
@@ -178,8 +180,10 @@ static void ui_draw_init(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 224, 0, GL_RGB,
+    pthread_mutex_lock(&fb_lock);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 224, 0, GL_RGBA,
             GL_UNSIGNED_BYTE, framebuffer);
+    pthread_mutex_unlock(&fb_lock);
     
     glClearColor(0.0, 0.0, 0.0, 1.0);
 }
@@ -191,6 +195,10 @@ static void ui_draw_opengl(void)
     glLoadIdentity();
     glOrtho(0, 512, 0, 448, -1, 1);
     glEnable(GL_TEXTURE_2D);
+    pthread_mutex_lock(&fb_lock);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 224, GL_RGBA,
+            GL_UNSIGNED_BYTE, framebuffer);
+    pthread_mutex_unlock(&fb_lock);
     glBegin(GL_TRIANGLE_STRIP);
         glTexCoord2f(0.0, 0.0);
         glVertex2i(0, 448);

@@ -44,5 +44,6 @@ struct core_system
 void *core_entry(void *);
 int core_init(struct core_system *);
 static int core_load_rom(struct core_system *, const char *);
+static int core_load_palette(struct core_system *, uint8_t *);
 
 #endif

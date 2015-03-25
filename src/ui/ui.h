@@ -10,6 +10,7 @@
 #define QPRA_UI_H
 
 #include <stdint.h>
+#include <pthread.h>
 #include <SDL2/SDL.h>
 #include <GL/glx.h>
 #ifdef _WIN32
@@ -46,10 +47,15 @@ struct ui_window
 
 #endif
 
+extern pthread_mutex_t fb_lock;
+extern uint8_t framebuffer[256 * 224 * 4];
+
 void ui_init(int, char **);
 struct ui_window * ui_window_new(void);
 void ui_run(struct ui_window*);
 
+void ui_lock_fb(void);
+void ui_unlock_fb(void);
 void *ui_get_fb(void);
 
 extern struct ui_window *window;

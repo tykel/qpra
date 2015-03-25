@@ -92,6 +92,7 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
         if(rom_s[i] == NULL)
             goto l_malloc_error;
     }
+    mmu->rom_s = rom_s[0]; 
 
     /* Allocate the switchable RAM banks. */
     if(params->ram_banks == 0) {
@@ -107,6 +108,7 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
         if(ram_s[i] == NULL)
             goto l_malloc_error;
     }
+    mmu->ram_s = ram_s[0];
 
     /* Allocate the switchable tile ROM banks. */
     if(params->tile_banks == 0) {
@@ -122,6 +124,7 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
         if(tile_s[i] == NULL)
             goto l_malloc_error;
     }
+    mmu->tile_s = tile_s[0];
 
     /* Allocate the switchable DPCM ROM banks. */
     if(params->dpcm_banks == 0) {
@@ -137,6 +140,7 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
         if(dpcm_s[i] == NULL)
             goto l_malloc_error;
     }
+    mmu->dpcm_s = dpcm_s[0];
    
     /* Everything was allocated properly, phew. */
     LOGD("Allocated: %hhu ROM bank%s, %hhu RAM bank%s, %hhu tile ROM bank%s,"

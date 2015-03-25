@@ -20,7 +20,6 @@ static void ui_gtk_quit_destroy(void);
 static int gtk_area_start(GtkWidget *, void *);
 static int gtk_area_configure(GtkWidget *, GdkEventConfigure *, void *);
 
-extern uint8_t *framebuffer;
 extern pthread_t t_core; 
 
 #endif
