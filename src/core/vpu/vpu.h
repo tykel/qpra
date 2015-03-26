@@ -6,6 +6,9 @@
  *
  */
 
+#ifndef QPRA_CORE_VPU_H
+#define QPRA_CORE_VPU_H
+
 #include <stdint.h>
 
 #define VPU_TILEMAP_SIZE    0x480
@@ -97,4 +100,6 @@ uint8_t core_vpu_readb(struct core_vpu *, uint16_t);
 void core_vpu_writeb(struct core_vpu *, uint16_t, uint8_t);
 uint16_t core_vpu_readw(struct core_vpu *, uint16_t);
 void core_vpu_writew(struct core_vpu *, uint16_t, uint16_t);
+
+#endif
 

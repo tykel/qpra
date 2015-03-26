@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "core/core.h"
 #include "core/mmu/mmu.h"
 #include "core/cpu/cpu.h"
 #include "core/cpu/hrc.h"
@@ -36,7 +37,8 @@ static void core_mmu_writew(struct core_mmu *, uint16_t, uint16_t);
  * buffers it owns.
  * Sets up callbacks for I/O which redirects to another system component.
  */
-int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
+int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params,
+        struct core_temp_banks *banks)
 {
     int i;
     struct core_mmu *mmu;
@@ -51,14 +53,10 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
     mmu = *pmmu;
     
     /* Allocate the two fixed banks. */
-    rom_f = calloc(16*1024, sizeof(uint8_t));
-    if(rom_f == NULL)
-        goto l_malloc_error;
+    rom_f = banks->rom_f; 
     mmu->rom_f = rom_f;
 
-    ram_f = calloc(8*1024, sizeof(uint8_t));
-    if(ram_f == NULL)
-        goto l_malloc_error;
+    ram_f = banks->ram_f ? banks->ram_f : calloc(8*1024, sizeof(uint8_t));
     mmu->ram_f = ram_f;
 
     /* Allocate the cart permanent storage. */
@@ -88,9 +86,9 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
     if(rom_s == NULL)
         goto l_malloc_error;
     for(i = 0; i < params->rom_banks; ++i) {
-        rom_s[i] = calloc(16*1024, sizeof(uint8_t));
-        if(rom_s[i] == NULL)
-            goto l_malloc_error;
+        rom_s[i] = banks->rom_s[i] ?
+            banks->ram_f :
+            calloc(8*1024, sizeof(uint8_t)); 
     }
     mmu->rom_s = rom_s[0]; 
 
@@ -104,9 +102,9 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
     if(ram_s == NULL)
         goto l_malloc_error;
     for(i = 0; i < params->ram_banks; ++i) {
-        ram_s[i] = calloc(8*1024, sizeof(uint8_t));
-        if(ram_s[i] == NULL)
-            goto l_malloc_error;
+        ram_s[i] = banks->ram_s[i] ?
+            banks->ram_s[i] :
+            calloc(8*1024, sizeof(uint8_t)); 
     }
     mmu->ram_s = ram_s[0];
 
@@ -120,9 +118,9 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
     if(tile_s == NULL)
         goto l_malloc_error;
     for(i = 0; i < params->tile_banks; ++i) {
-        tile_s[i] = calloc(8*1024, sizeof(uint8_t));
-        if(tile_s[i] == NULL)
-            goto l_malloc_error;
+        tile_s[i] = banks->tile_s[i] ?
+            banks->tile_s[i] :
+            calloc(8*1024, sizeof(uint8_t)); 
     }
     mmu->tile_s = tile_s[0];
 
@@ -136,9 +134,9 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params)
     if(dpcm_s == NULL)
         goto l_malloc_error;
     for(i = 0; i < params->dpcm_banks; ++i) {
-        dpcm_s[i] = calloc(2*1024, sizeof(uint8_t));
-        if(dpcm_s[i] == NULL)
-            goto l_malloc_error;
+        dpcm_s[i] = banks->dpcm_s[i] ?
+            banks->dpcm_s :
+            calloc(2*1024, sizeof(uint8_t)); 
     }
     mmu->dpcm_s = dpcm_s[0];
    

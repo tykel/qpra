@@ -122,8 +122,11 @@ struct core_mmu
     uint8_t * (*apu_getbp)(uint16_t);
 };
 
+struct core_temp_banks;
+
 /* Function declarations. */
-int core_mmu_init(struct core_mmu **, struct core_mmu_params *);
+int core_mmu_init(struct core_mmu **, struct core_mmu_params *,
+        struct core_temp_banks *);
 int core_mmu_cpu(struct core_mmu *, struct core_cpu *);
 int core_mmu_destroy(struct core_mmu *);
 
@@ -146,11 +149,6 @@ int core_mmu_ww_send(struct core_mmu *, uint16_t, uint16_t);
 
 void core_mmu_update(struct core_mmu *);
 
-/* Private functions. */
-static uint8_t core_mmu_readb(struct core_mmu *, uint16_t);
-static void core_mmu_writeb(struct core_mmu *, uint16_t, uint8_t);
-static uint16_t core_mmu_readw(struct core_mmu *, uint16_t);
-static void core_mmu_writew(struct core_mmu *, uint16_t, uint16_t);
 
 #endif
 

@@ -37,6 +37,7 @@ struct arg_pair
 void *core_entry(void *data)
 {
     struct core_system *core;
+    struct core_temp_banks banks;
 
     struct arg_pair *pair = (struct arg_pair *)data;
     
@@ -46,19 +47,16 @@ void *core_entry(void *data)
         return 0;
     }
 
-    if(pair->argv[1][0] != '-' && core_load_rom(core, pair->argv[1])) {
+    if(pair->argv[1][0] != '-' && core_load_rom(core, pair->argv[1], &banks)) {
         LOGD("Loaded ROM file '%s' successfully", pair->argv[1]);
     } else {
         LOGD("Couldn't load a ROM file");
     }
 
-    if(!core_init(core)) {
+    if(!core_init(core, &banks)) {
         LOGE("System initialization failed; exiting");
         return NULL;
     }
-
-    memcpy(core->mmu->rom_f, core->header->data,
-            core->header->size - sizeof(core->header) - sizeof(uint8_t *));
 
     LOGD("Beginning emulation");
     while(!done()) {
@@ -79,7 +77,7 @@ void *core_entry(void *data)
  * Top-level initialization routine.
  * Initializes the various devices in core_system, turn by turn.
  */
-int core_init(struct core_system *core)
+int core_init(struct core_system *core, struct core_temp_banks *banks)
 {
     struct core_mmu_params mmup;
     uint8_t palette[768];
@@ -90,7 +88,7 @@ int core_init(struct core_system *core)
     mmup.dpcm_banks = core->header->dpcm_banks;
     mmup.vpu_readb = mmup.apu_readb = (void *) 0xffff0000;
     mmup.vpu_writeb = mmup.apu_writeb = (void *) 0xffff0000;
-    if(!core_mmu_init(&core->mmu, &mmup))
+    if(!core_mmu_init(&core->mmu, &mmup, banks))
         return 0;
     
     if(!core_cpu_init(&core->cpu, core->mmu))
@@ -113,10 +111,13 @@ int core_init(struct core_system *core)
 
 
 /* Reads and parses the ROM from disk. */
-int core_load_rom(struct core_system *core, const char *fn)
+int core_load_rom(struct core_system *core, const char *fn,
+        struct core_temp_banks *banks)
 {
     struct core_header_map *map;
+    struct core_header_bufmap buf;
     uint8_t *data;
+    int total = 0;
     FILE *fp = NULL;
 
     map = malloc(sizeof(struct core_header_map));
@@ -125,16 +126,47 @@ int core_load_rom(struct core_system *core, const char *fn)
         LOGE("Couldn't open ROM file '%s'", fn);
         return 0;
     }
-    if(fread(map, sizeof(uint8_t), 68, fp) != 68) {
+    if((total = fread(map, sizeof(uint8_t), 68, fp)) != 68) {
         LOGE("Couldn't read full ROM header");
         return 0;
     }
-    data = malloc(map->size - 68);
-    if(fread(data, sizeof(uint8_t), map->size - 68, fp) != (map->size - 68)) {
-        LOGE("Couldn't read full ROM file");
-        return 0;
-    }
-    map->data = data;
+    
+    do {
+        uint8_t *dst;
+        total += fread(&buf, sizeof(uint8_t), sizeof(buf), fp);
+        switch(buf.type) {
+            case CORE_HDR_ROMF:
+                banks->rom_f = malloc(buf.len);
+                dst = banks->rom_f;
+                break;
+            case CORE_HDR_ROMS:
+                banks->rom_s[buf.num] = malloc(buf.len);
+                dst = banks->rom_s[buf.num];
+                break;
+            case CORE_HDR_RAMF:
+                banks->ram_f = malloc(buf.len);
+                dst = banks->ram_f;
+                break;
+            case CORE_HDR_RAMS:
+                banks->ram_s[buf.num] = malloc(buf.len);
+                dst = banks->ram_s[buf.num];
+                break;
+            case CORE_HDR_TILS:
+                banks->tile_s[buf.num] = malloc(buf.len);
+                dst = banks->tile_s[buf.num];
+                break;
+            case CORE_HDR_AUDS:
+                banks->dpcm_s[buf.num] = malloc(buf.len);
+                dst = banks->dpcm_s[buf.num];
+                break;
+            default:
+                LOGE("Invalid buffer type found 0x%02x", buf.type);
+                return 0;
+        }
+        total += fread(dst, sizeof(uint8_t), buf.len, fp);
+
+    } while(total < map->size);
+    
     fclose(fp);
 
     LOGD("Header: size: %d, rom banks: %d, ram banks: %d, tile banks: %d, "
