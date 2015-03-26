@@ -86,8 +86,6 @@ int core_init(struct core_system *core, struct core_temp_banks *banks)
     mmup.ram_banks = core->header->ram_banks;
     mmup.tile_banks = core->header->tile_banks;
     mmup.dpcm_banks = core->header->dpcm_banks;
-    mmup.vpu_readb = mmup.apu_readb = (void *) 0xffff0000;
-    mmup.vpu_writeb = mmup.apu_writeb = (void *) 0xffff0000;
     if(!core_mmu_init(&core->mmu, &mmup, banks))
         return 0;
     
@@ -96,6 +94,8 @@ int core_init(struct core_system *core, struct core_temp_banks *banks)
     if(!core_mmu_cpu(core->mmu, core->cpu))
         return 0;
     if(!core_vpu_init(&core->vpu, core->cpu))
+        return 0;
+    if(!core_mmu_vpu(core->mmu, core->vpu))
         return 0;
     if(!core_load_palette(core, palette))
         return 0;

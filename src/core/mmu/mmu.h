@@ -50,6 +50,7 @@ static const uint16_t A_SERIAL_REG_END = 0xfff7;
 static const uint16_t A_INT_VEC = 0xfff8;
 static const uint16_t A_END = 0xffff;
 
+
 /* Memory bank names, for the core_mmu_bank_select function. */ 
 enum core_mmu_bank 
 {
@@ -83,6 +84,7 @@ enum core_mmu_access {
 struct core_mmu
 {
     struct core_cpu *cpu;
+    struct core_vpu *vpu;
 
     /* The memory banks. */
     uint8_t *rom_f;
@@ -128,6 +130,7 @@ struct core_temp_banks;
 int core_mmu_init(struct core_mmu **, struct core_mmu_params *,
         struct core_temp_banks *);
 int core_mmu_cpu(struct core_mmu *, struct core_cpu *);
+int core_mmu_vpu(struct core_mmu *, struct core_vpu *);
 int core_mmu_destroy(struct core_mmu *);
 
 int core_mmu_bank_select(struct core_mmu *, enum core_mmu_bank, uint8_t);

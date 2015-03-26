@@ -12,6 +12,7 @@
 #include "core/mmu/mmu.h"
 #include "core/cpu/cpu.h"
 #include "core/cpu/hrc.h"
+#include "core/vpu/vpu.h"
 #include "log.h"
 
 /* Static memory banks. */
@@ -205,6 +206,18 @@ int core_mmu_cpu(struct core_mmu *mmu, struct core_cpu *cpu)
     return 1;
 }
 
+/* Similar rationale to the above, except for the VPU state. */
+int core_mmu_vpu(struct core_mmu *mmu, struct core_vpu *vpu)
+{
+    if(vpu == NULL) {
+        LOGE("Attempted to set vpu for null mmu");
+        return 0;
+    }
+
+    mmu->vpu = vpu;
+    return 1;
+}
+
 
 /* 
  * Destroy the MMU state.
@@ -376,7 +389,7 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
     else if(a <= A_TILE_SWAP_END)
         return mmu->tile_s[a];
     else if(a <= A_VPU_END)
-        return mmu->vpu_readb(a);
+        return core_vpu_readb(mmu->vpu, a);
     else if(a <= A_APU_END)
         return mmu->apu_readb(a);
     else if(a <= A_DPCM_SWAP_END)
@@ -421,7 +434,7 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     else if(a == A_TILE_BANK_SELECT)
         core_mmu_bank_select(mmu, B_TILE_SWAP, v);
     else if(a <= A_VPU_END)
-        mmu->vpu_writeb(a, v);
+        core_vpu_writeb(mmu->vpu, a, v);
     else if(a == A_DPCM_BANK_SELECT)
         core_mmu_bank_select(mmu, B_DPCM_SWAP, v);
     else if(a <= A_APU_END)

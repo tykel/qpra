@@ -40,6 +40,24 @@
 #define VPU_SPR_XOFFSET     0b11110000
 #define VPU_SPR_YOFFSET     0b00001111
 
+#define VPU_A_L1TM          0xe000
+#define VPU_A_L1TM_END      0xe47f
+#define VPU_A_L2TM          0xe480
+#define VPU_A_L2TM_END      0xe8ff
+#define VPU_A_PALS          0xe900
+#define VPU_A_PALS_END      0xe9ff
+#define VPU_A_SPRCTL        0xea00
+#define VPU_A_SPRCTL_END    0xeaff
+#define VPU_A_SPRCOORD      0xeb00
+#define VPU_A_SPRCOORD_END  0xeb7f
+#define VPU_A_L12_PAL       0xeb80
+#define VPU_A_SPR_PAL       0xeb81
+#define VPU_A_L1_SCR        0xeb82
+#define VPU_A_L1_SCR_END    0xeb85
+#define VPU_A_L2_SCR        0xeb86
+#define VPU_A_L2_SCR_END    0xeb89
+#define VPU_A_TILE_B_SELECT 0xeb90
+
 struct core_cpu;
 struct core_mmu;
 

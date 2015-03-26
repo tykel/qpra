@@ -194,6 +194,7 @@ void core_vpu_write_fb(struct core_vpu *vpu)
         struct core_vpu_sprite *spr = (void *)&vpu->spr_ctl[s * 4];
         if(!core_vpu__spr_enabled(spr))
             continue;
+        LOGV("core.vpu: detected enabled sprite #%d", s);
         int d = core_vpu__spr_depth(spr);
         depth[d][depth_num[d]++] = s;
     }
@@ -262,3 +263,24 @@ void core_vpu_write_fb(struct core_vpu *vpu)
     /* The framebuffer is now ready for use by the UI thread. */
     ui_unlock_fb();
 }
+
+
+/* TODO: Switch through VPU address space segments to access right memory. */
+uint8_t core_vpu_readb(struct core_vpu *vpu, uint16_t a)
+{
+    return 0xff;
+}
+
+void core_vpu_writeb(struct core_vpu *vpu, uint16_t a, uint8_t v)
+{
+}
+
+uint16_t core_vpu_readw(struct core_vpu *vpu, uint16_t a)
+{
+    return 0xffff;
+}
+
+void core_vpu_writew(struct core_vpu *vpu, uint16_t a, uint16_t v)
+{
+}
+
