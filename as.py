@@ -30,7 +30,9 @@ dirPattern = r"""
 $
 """
 
-directives = { ".bank":0, ".db":1 }
+defs = { 'loop':0x24, 'test':0x3, 'init':0x0}
+
+directives = { ".bank":0, ".db":1, ".org":3 }
 
 banks = {
         "rom_fixed":0, "rom_swap":1, "ram_fixed":2,
@@ -52,11 +54,12 @@ opcodes = {
         "sub":23, "mul":24, "div":25, "lsl":26, "lsr":27, "asr":28, "and":29,
         "or":30, "xor":31
         }
+rr = ["a","b","c","d","e","f"]
 
 regs = { 'a':0, 'b':1, 'c':2, 'd':3, 'e':4, 'f':5, 'p':6, 's':7 }
 
-def getAddrMode(nops, op1, op2, defs):
-    #print 'getAddrMode: ', nops, ': ', op1, ', ', op2, ' -- ', defs
+def getAddrMode(nops, op1, op2, ds):
+    #print 'getAddrMode: ', nops, ': ', op1, ', ', op2, ' -- ', ds
     if nops == 0:
         return 0
     if nops == 1:
@@ -69,8 +72,8 @@ def getAddrMode(nops, op1, op2, defs):
                 return 2
             else:
                 return 4
-        elif re.match("\w+", op1) is not None and op1 in defs:
-            if num(defs[op1]) < 256:
+        elif re.match("\w+", op1) is not None and op1 in ds:
+            if num(ds[op1]) < 256:
                 return 2
             else:
                 return 4
@@ -79,8 +82,8 @@ def getAddrMode(nops, op1, op2, defs):
                 return 3
             else:
                 return 5
-        elif re.match("\[\w+\]", op1) is not None and op1 in defs:
-            if num(defs[op1]) < 256:
+        elif re.match("\[\w+\]", op1) is not None and op1 in ds:
+            if num(ds[op1]) < 256:
                 return 3
             else:
                 return 5
@@ -98,8 +101,8 @@ def getAddrMode(nops, op1, op2, defs):
                     return 9
                 else:
                     return 11
-            elif re.match("\w+", op2) is not None and op2 in defs:
-                if num(defs[op2]) < 256:
+            elif re.match("\w+", op2) is not None and op2 in ds:
+                if num(ds[op2]) < 256:
                     return 9
                 else:
                     return 11
@@ -108,8 +111,8 @@ def getAddrMode(nops, op1, op2, defs):
                     return 10
                 else:
                     return 12
-            elif re.match("\[\w+\]", op2) is not None and op2 in defs:
-                if num(defs[op2]) < 256:
+            elif re.match("\[\w+\]", op2) is not None and op2 in ds:
+                if num(ds[op2]) < 256:
                     return 10
                 else:
                     return 12
@@ -128,8 +131,8 @@ def getAddrMode(nops, op1, op2, defs):
                     return 13
                 else:
                     return 14
-            elif re.match("\[\w+\]", op1) is not None and op1 in defs:
-                if num(defs[op1]) < 256:
+            elif re.match("\[\w+\]", op1) is not None and op1 in ds:
+                if num(ds[op1]) < 256:
                     return 13
                 else:
                     return 14
@@ -162,11 +165,24 @@ class instr:
         if nops > 1:
             self.op2 = op2
 
+        if strop in ["nop", "int", "rti", "rts"]:
+            self.size = 1
+        elif nops == 1 and self.op1 in rr:
+            self.size = 2
+        elif nops == 2 and self.op1 in rr and self.op2 in rr:
+            self.size = 2
+        elif getAddrMode(nops, op1, op2, defs) in [2,3,9,10,13]:
+            self.size = 3
+        else:
+            self.size = 4
+
     strop = ' '
     op = 0
     op1 = ' '
     op2 = ' '
     nops = 0
+    addr = 0
+    size = 0
 
     isdata = 0
     strdata = []
@@ -179,7 +195,7 @@ def main():
     b = 0
     il = [[],[],[],[],[],[]]
     romname = 'test.kpr'
-    defs = { 'loop':0x24, 'test':0x3, 'init':0x0}
+    org = 0
 
     if(len(sys.argv) < 2):
         print 'no input files, exiting'
@@ -198,17 +214,24 @@ def main():
             # Bank directive
             if d == 0:
                 b = banks[result.group(2)]
+                org = bank_addrs[b]
                 #print 'Setting bank to bank #', b, ' (', result.group(2), ')'
                 continue
             # Data byte directive
             elif d == 1:
                 db = instr(result.group(1), d, 0)
                 db.isdata = 1
+                db.addr = org
                 db.strdata = list()
                 for i in xrange(2,6):
                     if result.group(i) is not None:
                         db.strdata.append(result.group(i))
+                db.size = len(db.strdata)
                 il[b].append(db)
+                org += db.size
+            # Org (origin) directive
+            elif d == 3:
+                org = num(result.group(2))
 
             continue
 
@@ -216,17 +239,21 @@ def main():
         result = irgx.match(line)
         if result is not None:
             o = opcodes[result.group(2)]
+            iii = None
             if o is None:
                 print 'error: \'', result.group(2), '\' is not a valid opcode'
                 continue
             if not result.group(5):
                 if not result.group(4):
-                    il[b].append(instr(result.group(2), o, 0))
+                    iii = instr(result.group(2), o, 0)
                 else:
-                    il[b].append(instr(result.group(2), o, 1, result.group(4)))
+                    iii = instr(result.group(2), o, 1, result.group(4))
             else:
-                il[b].append(instr(result.group(2), o, 2, result.group(4), result.group(5)))
+                iii = instr(result.group(2), o, 2, result.group(4), result.group(5))
             #print 'Emitting op', hex(o), '(', result.group(2), ')'
+            iii.addr = org
+            il[b].append(iii)
+            org += iii.size
             continue
 
     f.close()
@@ -247,16 +274,22 @@ def main():
     f.write(struct.pack('I', 0))
     f.write(name)
     f.write(desc)
-    tc = 68
-    c = 0
+    tc = 68     # Bytes written to file
+    c = 0       # Bytes of ROM contents (excl. file header) written to file
+
     for bn in xrange(len(il)):
         if len(il[bn]) == 0:
             continue
+        offs = bank_addrs[bn]    # Current offset in address space
         print 'Writing bank ', bn
         f.write(struct.pack('B',bn))
         f.write(struct.pack('B', 0))
         f.write(struct.pack('H',bank_sizes[bn]))
         for i in il[bn]:
+            while offs < i.addr:
+                f.write(struct.pack('B', 0))
+                c += 1
+                offs += 1
             # If this is a db/dw directive, write the data bytes
             if i.isdata:
                 i.data = list()
@@ -268,6 +301,7 @@ def main():
                 for db in i.data:
                     f.write(struct.pack('B', db))
                     c += 1
+                    offs += 1
                 continue
             # Otherwise process the instruction normally
             op1 = 0
@@ -289,6 +323,7 @@ def main():
             b = (i.op << 3) | (am >> 2)
             f.write(struct.pack('B', b))
             c += 1
+            offs += 1
             if i.nops == 0:
                 continue
 
@@ -299,27 +334,33 @@ def main():
                 b |= op2
             f.write(struct.pack('B', b))
             c += 1
+            offs += 1
 
             if am in [2,3,4,5,13,14]:
                 b = op1 & 0xff
                 f.write(struct.pack('B', b))
                 c += 1
+                offs += 1
                 if am in [4,5,14]:
                     b = op1 >> 8
                     f.write(struct.pack('B', b))
                     c += 1
+                    offs += 1
             elif am in [9,10,11,12]:
                 b = op2 & 0xff
                 f.write(struct.pack('B', b))
                 c += 1
+                offs += 1
                 if am in [11,12]:
                     b = op2 >> 8
                     f.write(struct.pack('B', b))
                     c += 1
+                    offs += 1
 
         while c < bank_sizes[bn]:
             f.write(struct.pack('B', 0))
             c += 1
+            offs += 1
         print 'Wrote', c, 'bytes to bank', bn
         tc += c
         c = 0
