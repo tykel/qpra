@@ -141,7 +141,7 @@ static inline uint16_t INSTR_D16(struct core_instr *i)
 
 static inline enum core_opsz INSTR_OPSZ(struct core_instr *i)
 {
-    return (i->ib0 & 0x80) ? OP_16 : OP_8;
+    return (i->ib0 & 0x04) ? OP_16 : OP_8;
 }
 
 /* Utility functions for querying various parameters about instructions. */

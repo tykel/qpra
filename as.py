@@ -183,6 +183,7 @@ class instr:
     nops = 0
     addr = 0
     size = 0
+    w = 1
 
     isdata = 0
     strdata = []
@@ -250,7 +251,8 @@ def main():
                     iii = instr(result.group(2), o, 1, result.group(4))
             else:
                 iii = instr(result.group(2), o, 2, result.group(4), result.group(5))
-            #print 'Emitting op', hex(o), '(', result.group(2), ')'
+            if result.group(3) is not None:
+                iii.w = 1 if result.group(3) == '.w' else 0
             iii.addr = org
             il[b].append(iii)
             if result.group(1) is not None:
@@ -322,7 +324,7 @@ def main():
                     op2 = defs[i.op2]
                 else:
                     op2 = num(i.op2)
-            b = (i.op << 3) | (am >> 2)
+            b = (i.op << 3) | (i.w << 2) | (am >> 2)
             f.write(struct.pack('B', b))
             c += 1
             offs += 1
