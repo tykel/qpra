@@ -149,38 +149,6 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params,
          params->tile_banks, params->tile_banks > 1 ? "s" : "",
          params->dpcm_banks, params->dpcm_banks > 1 ? "s" : "");
 
-    /* Set up the callbacks for memory access in other parts of the system. */
-    if(params->vpu_readb == NULL) {
-        LOGE("Invalid VPU byte read callback");
-        return 0;
-    }
-    mmu->vpu_readb = params->vpu_readb;
-    if(params->vpu_writeb == NULL) {
-        LOGE("Invalid VPU byte write callback");
-        return 0;
-    }
-    mmu->vpu_writeb = params->vpu_writeb;
-    if(params->vpu_getbp == NULL) {
-        LOGE("Invalid VPU byte pointer callback");
-        return 0;
-    }
-    mmu->vpu_getbp = params->vpu_getbp;
-    if(params->apu_readb == NULL) {
-        LOGE("Invalid APU byte read callback");
-        return 0;
-    }
-    mmu->apu_readb = params->apu_readb;
-    if(params->apu_writeb == NULL) {
-        LOGE("Invalid APU byte write callback");
-        return 0;
-    }
-    mmu->apu_writeb = params->apu_writeb;
-    if(params->apu_getbp == NULL) {
-        LOGE("Invalid APU byte pointer callback");
-        return 0;
-    }
-    mmu->apu_getbp = params->apu_getbp;
-
     return 1;
 
 l_malloc_error:
@@ -342,6 +310,7 @@ int core_mmu_ww_send(struct core_mmu *mmu, uint16_t a, uint16_t v)
 {
     mmu->pending = MMU_WRITE;
     mmu->a = a;
+    mmu->v = v;
     mmu->vsz = 2;
     return 1;
 }
@@ -391,7 +360,7 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
     else if(a <= A_VPU_END)
         return core_vpu_readb(mmu->vpu, a);
     else if(a <= A_APU_END)
-        return mmu->apu_readb(a);
+        return 0;//mmu->apu_readb(a);
     else if(a <= A_DPCM_SWAP_END)
         return mmu->dpcm_s[a];
     else if(a <= A_CART_FIXED_END)
@@ -438,7 +407,7 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     else if(a == A_DPCM_BANK_SELECT)
         core_mmu_bank_select(mmu, B_DPCM_SWAP, v);
     else if(a <= A_APU_END)
-        mmu->apu_writeb(a, v);
+        ;//mmu->apu_writeb(a, v);
     else if(a <= A_DPCM_SWAP_END)
         mmu->dpcm_s[a] = v;
     else if(a <= A_FIXED0_END)
@@ -478,7 +447,7 @@ static uint16_t core_mmu_readw(struct core_mmu *mmu, uint16_t a)
 /* Write a word to the correct device/bank part for that address. */
 static void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint16_t v)
 {
-    core_mmu_writeb(mmu, a, (v >> 8));
-    core_mmu_writeb(mmu, a + 1, v & 0xff);
+    core_mmu_writeb(mmu, a, v & 0xff);
+    core_mmu_writeb(mmu, a + 1, (v >> 8));
 }
 

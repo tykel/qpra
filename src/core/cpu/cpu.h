@@ -185,6 +185,13 @@ static inline int instr_is_op2data(struct core_instr *i)
     return (am == AM_DR_DB || am == AM_DR_DW);
 }
 
+static inline int instr_is_op1reg(struct core_instr *i)
+{
+    int am = INSTR_AM(i);
+    return (am == AM_DR_DR || am == AM_DR_IR || am == AM_DR_DB ||
+            am == AM_DR_IB || am == AM_DR_DW || am == AM_DR_IW);
+}
+
 static inline int instr_is_srcptr(struct core_instr *i)
 {
     int am = INSTR_AM(i);

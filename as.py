@@ -179,7 +179,7 @@ def main():
     b = 0
     il = [[],[],[],[],[],[]]
     romname = 'test.kpr'
-    defs = { 'loop':29, 'test':0x3, 'init':0x0}
+    defs = { 'loop':0x27, 'test':0x3, 'init':0x0}
 
     if(len(sys.argv) < 2):
         print 'no input files, exiting'
@@ -238,7 +238,7 @@ def main():
 
     f = open(romname, "wb")
     f.write(magic)
-    f.write(struct.pack('I', 32836))
+    f.write(struct.pack('I', 24652))
     f.write(struct.pack('I', 0))
     f.write(struct.pack('B', 1))
     f.write(struct.pack('B', 1))
@@ -249,17 +249,17 @@ def main():
     f.write(desc)
     tc = 68
     c = 0
-    bn = 0
-    for b in il:
-        if len(b) == 0:
+    for bn in xrange(len(il)):
+        if len(il[bn]) == 0:
             continue
         print 'Writing bank ', bn
         f.write(struct.pack('B',bn))
         f.write(struct.pack('B', 0))
         f.write(struct.pack('H',bank_sizes[bn]))
-        for i in b:
+        for i in il[bn]:
             # If this is a db/dw directive, write the data bytes
             if i.isdata:
+                i.data = list()
                 for d in i.strdata:
                     if d in defs:
                         i.data.append(defs[d])
@@ -286,21 +286,17 @@ def main():
                     op2 = defs[i.op2]
                 else:
                     op2 = num(i.op2)
-            #print 'am = ', am, ', op1 = ', op1, ', op2 = ', op2
             b = (i.op << 3) | (am >> 2)
-            #print 'output b = ', hex(b)
             f.write(struct.pack('B', b))
             c += 1
             if i.nops == 0:
                 continue
 
             b = (am << 6) & 255
-            #print 'interm b = ', hex(b)
             if am in [0,1,6,7,8,9,10,11,12]:
                 b |= (op1 << 3)
             if i.nops == 2 and am in [6,7,8,13,14]:
                 b |= op2
-            #print 'output b = ', hex(b)
             f.write(struct.pack('B', b))
             c += 1
 

@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O0 -g -D_POSIX_C_SOURCE=199309L -std=c99 -I./src -DLOG_LEVEL=2
+CFLAGS=-O0 -g -D_POSIX_C_SOURCE=199309L -std=c99 -I./src -DLOG_LEVEL=1
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 

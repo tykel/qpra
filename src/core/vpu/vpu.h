@@ -82,27 +82,35 @@ struct core_vpu {
     struct core_cpu *cpu;
     struct core_mmu *mmu;
 
+    /* Switchable tile bank. */
     uint8_t *tile_bank;
-    uint8_t layer1_tm[VPU_TILEMAP_SIZE];
-    uint8_t layer2_tm[VPU_TILEMAP_SIZE];
-    
-    uint8_t pals[VPU_PALETTE_NUM * VPU_PALETTE_SZ];
-    uint8_t spr_ctl[VPU_NUM_SPRITES * 4];
-    uint8_t grp_pos[VPU_NUM_GROUPS * 2];
-    
-    uint8_t layers_pi;
-    uint8_t spr_pi;
-    
-    uint8_t layer1_csx;
-    uint8_t layer1_fsx;
-    uint8_t layer1_csy;
-    uint8_t layer1_fsy;
+    /* Array representing remainder of VPU address space. */
+    uint8_t *mem;
 
-    uint8_t layer2_csx;
-    uint8_t layer2_fsx;
-    uint8_t layer2_csy;
-    uint8_t layer2_fsy;
+    /* Pointers to parts of VPU memory. */
+    uint8_t (*layer1_tm)[VPU_TILEMAP_SIZE];
+    uint8_t (*layer2_tm)[VPU_TILEMAP_SIZE];
+    
+    uint8_t (*pals)[VPU_PALETTE_NUM * VPU_PALETTE_SZ];
+    uint8_t (*spr_ctl)[VPU_NUM_SPRITES * 4];
+    uint8_t (*grp_pos)[VPU_NUM_GROUPS * 2];
+    
+    uint8_t *layers_pi;
+    uint8_t *spr_pi;
+    
+    uint8_t *layer1_csx;
+    uint8_t *layer1_fsx;
+    uint8_t *layer1_csy;
+    uint8_t *layer1_fsy;
 
+    uint8_t *layer2_csx;
+    uint8_t *layer2_fsx;
+    uint8_t *layer2_csy;
+    uint8_t *layer2_fsy;
+
+    uint8_t *tile_s_bank;
+
+    /* RGBA32 framebuffer pointer. */
     uint8_t *rgba_fb;
 };
 

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "core/core.h"
 #include "core/cpu/cpu.h"
 //#include "core/apu/apu.h"
@@ -60,12 +61,19 @@ void *core_entry(void *data)
 
     LOGD("Beginning emulation");
     while(!done()) {
-        for(int i = 0; i < 4; ++i) {
+        for(int i = 0; i < 5; ++i) {
             core_cpu_i_instr(core->cpu);
-            core_vpu_update(core->vpu);
-            core_vpu_write_fb(core->vpu);
         }
+        core_vpu_update(core->vpu);
+        core_vpu_write_fb(core->vpu);
+#ifdef _DEBUG
         getc(stdin);
+#else
+        struct timespec ts;
+        ts.tv_sec = 0;
+        ts.tv_nsec = 100 * 1000 * 1000;
+        nanosleep(&ts, NULL);
+#endif
     }
     LOGD("Finished emulation");
 
@@ -163,7 +171,9 @@ int core_load_rom(struct core_system *core, const char *fn,
                 LOGE("Invalid buffer type found 0x%02x", buf.type);
                 return 0;
         }
+        LOGD("read %d", buf.len);
         total += fread(dst, sizeof(uint8_t), buf.len, fp);
+        LOGD("total: %d", total);
 
     } while(total < map->size);
     

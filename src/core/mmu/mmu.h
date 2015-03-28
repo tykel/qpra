@@ -64,14 +64,6 @@ struct core_mmu_params
     uint8_t ram_banks;
     uint8_t tile_banks;
     uint8_t dpcm_banks;
-
-    uint8_t (*vpu_readb)(uint16_t);
-    void (*vpu_writeb)(uint16_t, uint8_t);
-    uint8_t * (*vpu_getbp)(uint16_t);
-
-    uint8_t (*apu_readb)(uint16_t);
-    void (*apu_writeb)(uint16_t, uint8_t);
-    uint8_t * (*apu_getbp)(uint16_t);
 };
 
 enum core_mmu_access {
@@ -98,6 +90,17 @@ struct core_mmu
     uint8_t *fixed1_f;
     uint8_t intvec[8];
 
+    uint8_t *bank_rom_f;        /* Fixed ROM bank */
+    uint8_t *bank_rom_s;        /* Switchable ROM bank */
+    uint8_t *bank_ram_f;        /* Fixed RAM bank */
+    uint8_t *bank_ram_s;        /* Switchable RAM bank */
+    uint8_t *bank_tile_s;       /* Switchable tile data bank */
+    uint8_t *bank_video;        /* Video sprite/layer control, palettes etc. */
+    uint8_t *bank_audio;        /* Audio control */
+    uint8_t *bank_dpcm_s;       /* Switchable DPCM audio bank */
+    uint8_t *bank_cart_f;       /* Cartride permanent storage */
+    uint8_t *bank_misc;         /* Miscellaneous control registers */
+
     /* Memory state control ports. */
     uint8_t rom_s_bank;
     uint8_t rom_s_total;
@@ -113,15 +116,6 @@ struct core_mmu
     uint16_t a;
     uint16_t v;
     size_t vsz;
-
-    /* Memory access callbacks for other subsystems. */
-    uint8_t (*vpu_readb)(uint16_t);
-    void (*vpu_writeb)(uint16_t, uint8_t);
-    uint8_t * (*vpu_getbp)(uint16_t);
-
-    uint8_t (*apu_readb)(uint16_t);
-    void (*apu_writeb)(uint16_t, uint8_t);
-    uint8_t * (*apu_getbp)(uint16_t);
 };
 
 struct core_temp_banks;

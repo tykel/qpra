@@ -193,6 +193,9 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             p.op1 = cpu->r[INSTR_RX(cpu->i)];
             p.op2 = cpu->r[INSTR_RY(cpu->i)];
             i(cpu, &p);
+            cpu->r[INSTR_RX(cpu->i)] = p.op1;
+            if(instr_is_2op(cpu->i))
+                cpu->r[INSTR_RY(cpu->i)] = p.op2;
             if(!instr_has_spderef(cpu->i))
                 cpu->i_done = 1;
         /* Fetch data byte/word after instruction. */
@@ -228,13 +231,19 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             cpu->i->db0 = B_HI(t);
             if(instr_has_dw(cpu->i)) {
                 cpu->i->db1 = B_LO(t);
-                //LOGV("core.cpu: data = %02x %02x", cpu->i->db0, cpu->i->db1);
+#ifdef _DEBUG
+                LOGV("core.cpu: data = %02x %02x", cpu->i->db0, cpu->i->db1);
+#endif
             } else {
-                //LOGV("core.cpu: data = %02x", cpu->i->db0);
+#ifdef _DEBUG
+                LOGV("core.cpu: data = %02x", cpu->i->db0);
+#endif
             }
             if(instr_is_op1data(cpu->i)) {
                 p.op1 = (INSTR_AM(cpu->i) == AM_DB) ?
                     INSTR_D8(cpu->i) : INSTR_D16(cpu->i);
+                if(instr_is_2op(cpu->i))
+                    p.op2 = cpu->r[INSTR_RY(cpu->i)];
             } else if(instr_is_op2data(cpu->i)) {
                 p.op1 = cpu->r[INSTR_RX(cpu->i)];
                 p.op2 = (INSTR_AM(cpu->i) == AM_DR_DB) ?
@@ -257,7 +266,8 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             } else {
                 i(cpu, &p);
                 if(!instr_is_dstptr(cpu->i)) {
-                    cpu->r[INSTR_RX(cpu->i)] = p.op1;
+                    if(instr_is_op1reg(cpu->i))
+                        cpu->r[INSTR_RX(cpu->i)] = p.op1;
                     cpu->i_done = 1;
                 }
             }
@@ -307,8 +317,10 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
                 }
             } else if(instr_is_dstptr(cpu->i)) {
                 (INSTR_OPSZ(cpu->i) == OP_16) ?
-                    core_mmu_ww_send(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1) :
-                    core_mmu_wb_send(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1);
+                    core_mmu_ww_send(cpu->mmu, INSTR_D16(cpu->i),
+                            cpu->r[INSTR_RX(cpu->i)]) :
+                    core_mmu_wb_send(cpu->mmu, INSTR_D16(cpu->i),
+                            cpu->r[INSTR_RX(cpu->i)]);
             }
         } else if(instr_is_srcptr(cpu->i)) {
             if(instr_is_dstptr(cpu->i)) {

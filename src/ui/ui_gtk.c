@@ -107,7 +107,7 @@ struct ui_window * ui_window_new_gtk(void)
     g_object_set_data(G_OBJECT(window->window), "area", window->area);
     g_object_set_data(G_OBJECT(window->window), "context", window->context);
     
-    gtk_widget_set_size_request(window->window, 512, 448);
+    gtk_widget_set_size_request(window->window, 768, 672); //512, 448);
     gtk_window_set_resizable (GTK_WINDOW(window->window), FALSE);
 
     gtk_box_pack_start(GTK_BOX(box), menubar, FALSE, FALSE, 0);
@@ -178,8 +178,8 @@ static void ui_draw_init(void)
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     pthread_mutex_lock(&fb_lock);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 224, 0, GL_RGBA,
             GL_UNSIGNED_BYTE, framebuffer);
@@ -193,21 +193,21 @@ static void ui_draw_opengl(void)
     glClear(GL_COLOR_BUFFER_BIT);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0, 512, 0, 448, -1, 1);
+    glOrtho(0, 768, 0, 672, -1, 1); //512, 0, 448, -1, 1);
     glEnable(GL_TEXTURE_2D);
     pthread_mutex_lock(&fb_lock);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 224, GL_RGBA,
             GL_UNSIGNED_BYTE, framebuffer);
     pthread_mutex_unlock(&fb_lock);
     glBegin(GL_TRIANGLE_STRIP);
-        glTexCoord2f(0.0, 0.0);
-        glVertex2i(0, 448);
-        glTexCoord2f(0.0, 1.0);
-        glVertex2i(512, 448);
-        glTexCoord2f(1.0, 1.0);
-        glVertex2i(0, 0);
         glTexCoord2f(1.0, 0.0);
-        glVertex2i(512, 0);
+        glVertex2i(768, 672); //448);
+        glTexCoord2f(0.0, 0.0);
+        glVertex2i(0, 672); //512, 448);
+        glTexCoord2f(1.0, 1.0);
+        glVertex2i(768, 0);
+        glTexCoord2f(0.0, 1.0);
+        glVertex2i(0, 0); //512, 0);
     glEnd();
 }
 

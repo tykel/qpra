@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "core/vpu/vpu.h"
 #include "core/cpu/cpu.h"
@@ -14,15 +15,20 @@
 #include "ui/ui.h"
 #include "log.h"
 
+#ifdef _DEBUG
+#define _DEBUG_VPU
+#define _DEBUG_MEMORY
+#endif
+
 struct rgba pal_fixed[VPU_FIX_PALETTE_SZ];
 
 
 static inline int core_vpu__pal_l1(struct core_vpu *vpu) {
-    return (vpu->layers_pi & VPU_LAYER1_PI) >> 4;
+    return (*vpu->layers_pi & VPU_LAYER1_PI) >> 4;
 }
 
 static inline int core_vpu__pal_l2(struct core_vpu *vpu) {
-    return (vpu->layers_pi & VPU_LAYER2_PI);
+    return (*vpu->layers_pi & VPU_LAYER2_PI);
 }
 
 static inline int core_vpu__spr_enabled(struct core_vpu_sprite *spr) {
@@ -84,8 +90,31 @@ int core_vpu_init(struct core_vpu **pvpu, struct core_cpu *cpu)
     memset(vpu, 0, sizeof(struct core_vpu));
     vpu->cpu = cpu;
     vpu->mmu = cpu->mmu;
-    /* XXX: Fix this. */
+    
     vpu->tile_bank = vpu->mmu->tile_s;
+
+    vpu->mem = malloc(3*1024);
+    if(vpu->mem == NULL) {
+        LOGE("Could not allocate video memory space; exiting");
+        return 0;
+    }
+    vpu->layer1_tm = (uint8_t (*)[VPU_TILEMAP_SIZE])vpu->mem;
+    vpu->layer2_tm = (uint8_t (*)[VPU_TILEMAP_SIZE])(vpu->mem + 0x480);
+    vpu->pals = (uint8_t (*)[VPU_PALETTE_NUM*VPU_PALETTE_SZ])(vpu->mem + 0x900);
+    vpu->spr_ctl = (uint8_t (*)[VPU_NUM_SPRITES*4])(vpu->mem + 0xa00);
+    vpu->grp_pos = (uint8_t (*)[VPU_NUM_GROUPS*2])(vpu->mem + 0xb00);
+    vpu->layers_pi = vpu->mem + 0xb80;
+    vpu->spr_pi = vpu->mem + 0xb81;
+    vpu->layer1_csx = vpu->mem + 0xb82;
+    vpu->layer1_fsx = vpu->mem + 0xb83;
+    vpu->layer1_csy = vpu->mem + 0xb84;
+    vpu->layer1_fsy = vpu->mem + 0xb85;
+    vpu->layer2_csx = vpu->mem + 0xb86;
+    vpu->layer2_fsx = vpu->mem + 0xb87;
+    vpu->layer2_csy = vpu->mem + 0xb88;
+    vpu->layer2_fsy = vpu->mem + 0xb89;
+    vpu->tile_s_bank = vpu->mem + 0xb90;
+
     vpu->rgba_fb = ui_get_fb();
 }
 
@@ -134,27 +163,24 @@ void core_vpu_write_fb(struct core_vpu *vpu)
     /* Next, render the tilemaps layers. */
     for(l = 0; l < 2; ++l) {
         for(ty = 0; ty < VPU_TILE_YRES; ++ty) {
-            int scroll_y = (!l ? vpu->layer1_csy : vpu->layer2_csy) % 32;
+            int scroll_y = (!l ? *vpu->layer1_csy : *vpu->layer2_csy) % 32;
             if(ty < scroll_y)
                 continue;
             for(tx = 0; tx < VPU_TILE_XRES; ++tx) {
                 uint8_t *tile;
                 int index, x, y;
-                int scroll_x = (!l ? vpu->layer1_csx : vpu->layer2_csx) % 28;
+                int scroll_x = (!l ? *vpu->layer1_csx : *vpu->layer2_csx) % 28;
                 int pi = !l ? core_vpu__pal_l1(vpu) : core_vpu__pal_l2(vpu);
 
                 if(tx < scroll_x)
                     continue;
 
-                index = !l ? vpu->layer1_tm[ty * VPU_TILE_XRES] :
-                                vpu->layer2_tm[ty * VPU_TILE_XRES];
-                if(index)
-                    LOGD("core.vpu: found non-0 index %d at T(%d,%d)",
-                         index, tx, ty);
+                index = !l ? (*vpu->layer1_tm)[ty * VPU_TILE_XRES] :
+                                (*vpu->layer2_tm)[ty * VPU_TILE_XRES];
                 tile = &vpu->tile_bank[index * VPU_TILE_SZ];
                 for(y = 0; y < 8; ++y) {
-                    uint8_t fsy = !l ? vpu->layer1_fsy : vpu->layer2_fsy;
-                    uint8_t fsx = !l ? vpu->layer1_fsx : vpu->layer2_fsx;
+                    uint8_t fsy = !l ? *vpu->layer1_fsy : *vpu->layer2_fsy;
+                    uint8_t fsx = !l ? *vpu->layer1_fsx : *vpu->layer2_fsx;
                     /*
                      * Let's break this down:
                      * - the Y coordinate in the framebuffer is the number
@@ -176,9 +202,9 @@ void core_vpu_write_fb(struct core_vpu *vpu)
                         hi = p >> 4;
                         lo = p & 0xf;
 
-                        rgb = pal_fixed[vpu->pals[pi*VPU_PALETTE_SZ + hi]];
+                        rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + hi]];
                         *fbp = rgb;
-                        rgb = pal_fixed[vpu->pals[pi*VPU_PALETTE_SZ + lo]];
+                        rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + lo]];
                         *(fbp + 1) = rgb;
                     }
                 }
@@ -191,16 +217,17 @@ void core_vpu_write_fb(struct core_vpu *vpu)
     memset(depth_num, 0, VPU_NUM_SPR_LAYERS * sizeof(int));
     /* First, sort them by depth/Z-index so they can be blitted in order. */
     for(s = 0; s < VPU_NUM_SPRITES; ++s) {
-        struct core_vpu_sprite *spr = (void *)&vpu->spr_ctl[s * 4];
+        struct core_vpu_sprite *spr = (void *)&(*vpu->spr_ctl)[s * 4];
         if(!core_vpu__spr_enabled(spr))
             continue;
-        LOGV("core.vpu: detected enabled sprite #%d", s);
+        //LOGV("core.vpu: detected enabled sprite #%d", s);
         int d = core_vpu__spr_depth(spr);
         depth[d][depth_num[d]++] = s;
     }
     /* Now iterate over each "layer" of sprites. */
-    for(z = 0; z < VPU_NUM_SPR_LAYERS; ++z) {
+    for(z = VPU_NUM_SPR_LAYERS - 1; z >= 0; --z) {
         int ls;
+        //LOGD("core.vpu: sprite layer %d", z);
         for(ls = 0; ls < depth_num[z]; ++ls) {
             struct core_vpu_sprite *spr;
             uint8_t *tile;
@@ -210,7 +237,7 @@ void core_vpu_write_fb(struct core_vpu *vpu)
             int h2, v2, hm, vm, g;
             int xoffs, yoffs;
             int t, pi;
-            int x, y;
+            int x, y, tx, ty;
 
             s = depth[z][ls];
             spr = (void *)&vpu->spr_ctl[s * 4];
@@ -224,10 +251,17 @@ void core_vpu_write_fb(struct core_vpu *vpu)
             hm = core_vpu__spr_hmirror(spr);
             vm = core_vpu__spr_vmirror(spr);
             t = core_vpu__spr_tile(spr);
-            pi = vpu->spr_pi & VPU_SPRITE_PI;
+            pi = *vpu->spr_pi & VPU_SPRITE_PI;
 
-            px = vpu->grp_pos[g*2];
-            py = vpu->grp_pos[g*2 + 1];
+            px = *vpu->grp_pos[g*2];
+            py = *vpu->grp_pos[g*2 + 1];
+       
+#ifdef _DEBUG_VPU
+            LOGD("core.vpu: rendering sprite:");
+            LOGD("...group %d, tile %d, h2: %d, v2: %d, hm: %d, vm: %d",
+                    g, t, h2, v2, hm, vm);
+            LOGD("...palette %d, group.pos (%d, %d)", pi, px, py);
+#endif
 
 #define _MAX(x,y) ((x)>(y)?(x):(y))
             startx = _MAX(0, px + (xoffs - 8) + (hm ? 7 + 8*h2 : 0));
@@ -238,22 +272,44 @@ void core_vpu_write_fb(struct core_vpu *vpu)
             dy = hm ? (-1 - v2) : (1 + v2);
 #undef _MAX
             tile = &vpu->tile_bank[t * VPU_TILE_SZ];
+#ifdef _DEBUG_VPU
+            LOGD("core.vpu: tile dump:");
+            LOGD("...%02x %02x %02x %02x", 
+                    tile[0], tile[1], tile[2], tile[3]);
+            LOGD("...%02x %02x %02x %02x",
+                    tile[4], tile[5], tile[6], tile[7]);
+            LOGD("...%02x %02x %02x %02x",
+                    tile[8], tile[9], tile[10], tile[11]);
+            LOGD("...%02x %02x %02x %02x",
+                    tile[12], tile[13], tile[14], tile[15]);
+            LOGD("...%02x %02x %02x %02x",
+                    tile[16], tile[17], tile[18], tile[19]);
+            LOGD("...%02x %02x %02x %02x",
+                    tile[20], tile[21], tile[22], tile[23]);
+            LOGD("...%02x %02x %02x %02x",
+                    tile[24], tile[25], tile[26], tile[27]);
+            LOGD("...%02x %02x %02x %02x",
+                    tile[28], tile[29], tile[30], tile[31]);
+            
+            LOGD("core.vpu: startx: %d, dx: %d, endx: %d", startx, dx, endx);
+            LOGD("core.vpu: starty: %d, dy: %d, endy: %d", starty, dy, endy);
+#endif
 
-            for(y = starty; y != endy; ++y) {
-                for(x = startx; x != endx; ++x) {
+            for(y = starty, ty = 0; y != endy; y += dy, ++ty) {
+                for(x = startx, tx = 0; tx < 4; x += 2*dx, ++tx) {
                     uint8_t p;
                     uint8_t hi, lo;
                     struct rgba rgb, *fbp;
 
-                    p = tile[y * (8>>1) + x];
+                    p = tile[ty * (8>>1) + tx];
 
                     hi = p >> 4;
                     lo = p & 0xf;
                     fbp = (struct rgba *)&vpu->rgba_fb[(y*VPU_XRES + x) * 4];
 
-                    rgb = pal_fixed[vpu->pals[pi*VPU_PALETTE_SZ + hi]];
-                    *fbp = rgb;
-                    rgb = pal_fixed[vpu->pals[pi*VPU_PALETTE_SZ + lo]];
+                    rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + hi]];
+                    *fbp++ = rgb;
+                    rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + lo]];
                     *fbp = rgb;
                 }
             }
@@ -268,19 +324,34 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 /* TODO: Switch through VPU address space segments to access right memory. */
 uint8_t core_vpu_readb(struct core_vpu *vpu, uint16_t a)
 {
-    return 0xff;
+#ifdef _DEBUG_MEMORY
+    LOGV("core.vpu: read byte @ $%04x", a);
+#endif
+    return vpu->mem[a - 0xe000];
 }
 
 void core_vpu_writeb(struct core_vpu *vpu, uint16_t a, uint8_t v)
 {
+#ifdef _DEBUG_MEMORY
+    LOGV("core.vpu: wrote %02x @ $%04x", v, a);
+#endif
+    vpu->mem[a - 0xe000] = v;
 }
 
 uint16_t core_vpu_readw(struct core_vpu *vpu, uint16_t a)
 {
-    return 0xffff;
+    uint8_t hi, lo;
+    hi = core_vpu_readb(vpu, a);
+    lo = core_vpu_readb(vpu, a+1);
+    return hi << 8 | lo;
 }
 
 void core_vpu_writew(struct core_vpu *vpu, uint16_t a, uint16_t v)
 {
+    core_vpu_writeb(vpu, a, v & 0xff);
+    core_vpu_writeb(vpu, a+1, v >> 8);
 }
+
+#undef _DEBUG_VPU
+#undef _DEBUG_MEMORY
 
