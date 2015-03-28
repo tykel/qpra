@@ -30,7 +30,7 @@ dirPattern = r"""
 $
 """
 
-defs = { 'loop':0x24, 'test':0x3, 'init':0x0}
+defs = {}
 
 directives = { ".bank":0, ".db":1, ".org":3 }
 
@@ -253,6 +253,8 @@ def main():
             #print 'Emitting op', hex(o), '(', result.group(2), ')'
             iii.addr = org
             il[b].append(iii)
+            if result.group(1) is not None:
+                defs[result.group(1)[:-1]] = org
             org += iii.size
             continue
 
@@ -369,6 +371,9 @@ def main():
     f.close()
 
     print 'Wrote', tc, 'bytes to', romname
+    print 'Found following labels:'
+    for ddd in defs:
+        print ddd, ':', hex(defs[ddd])
 
 if __name__ == "__main__":
     main()
