@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O0 -g -D_POSIX_C_SOURCE=199309L -std=c99 -I./src -DLOG_LEVEL=1
+CFLAGS=-O0 -g -D_POSIX_C_SOURCE=199309L -std=c99 -I./src -DLOG_LEVEL=1 #-D_DEBUG
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 
@@ -28,7 +28,7 @@ UI_SRCS_ALL:=$(addprefix $(SRC)/$(UI)/,$(UI_SRCS_ALL))
 LIBS:=$(shell pkg-config --libs gtk+-3.0 gmodule-2.0) 
 LIBS+=$(shell sdl2-config --libs)
 
-.PHONY: all
+.PHONY: all clean
 
 all: qpra test.kpr
 
@@ -41,5 +41,8 @@ libcore.so: $(CORE_SRCS_ALL)
 libui.so: $(UI_SRCS_ALL)
 	$(CC) $(CFLAGS) -fPIC $(UI_SRCS) -shared -o $@
 
-test.kpr: test.s
+test.kpr: asm/test.s
 	./as.py $<
+
+clean:
+	rm -f libcore.so libui.so qpra test.kpr

@@ -61,7 +61,7 @@ void *core_entry(void *data)
 
     LOGD("Beginning emulation");
     while(!done()) {
-        for(int i = 0; i < 5; ++i) {
+        for(int i = 0; i < 10; ++i) {
             core_cpu_i_instr(core->cpu);
         }
         core_vpu_update(core->vpu);
@@ -171,9 +171,7 @@ int core_load_rom(struct core_system *core, const char *fn,
                 LOGE("Invalid buffer type found 0x%02x", buf.type);
                 return 0;
         }
-        LOGD("read %d", buf.len);
         total += fread(dst, sizeof(uint8_t), buf.len, fp);
-        LOGD("total: %d", total);
 
     } while(total < map->size);
     

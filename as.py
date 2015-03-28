@@ -179,7 +179,7 @@ def main():
     b = 0
     il = [[],[],[],[],[],[]]
     romname = 'test.kpr'
-    defs = { 'loop':0x27, 'test':0x3, 'init':0x0}
+    defs = { 'loop':0x24, 'test':0x3, 'init':0x0}
 
     if(len(sys.argv) < 2):
         print 'no input files, exiting'

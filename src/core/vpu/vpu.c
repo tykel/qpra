@@ -60,11 +60,13 @@ static inline int core_vpu__spr_group(struct core_vpu_sprite *spr) {
 }
 
 static inline int core_vpu__spr_xoffs(struct core_vpu_sprite *spr) {
-    return (spr->b2 & VPU_SPR_XOFFSET) >> 4;
+    int offs = (spr->b2 & VPU_SPR_XOFFSET) >> 4;
+    return (offs & 0x8) ? (~(VPU_SPR_XOFFSET>>4) | offs) : offs;
 }
 
 static inline int core_vpu__spr_yoffs(struct core_vpu_sprite *spr) {
-    return (spr->b2 & VPU_SPR_YOFFSET);
+    int offs = (spr->b2 & VPU_SPR_YOFFSET);
+    return (offs & 0x8) ? (~VPU_SPR_YOFFSET | offs) : offs;
 }
 
 static inline int core_vpu__spr_tile(struct core_vpu_sprite *spr) {
@@ -253,21 +255,22 @@ void core_vpu_write_fb(struct core_vpu *vpu)
             t = core_vpu__spr_tile(spr);
             pi = *vpu->spr_pi & VPU_SPRITE_PI;
 
-            px = *vpu->grp_pos[g*2];
-            py = *vpu->grp_pos[g*2 + 1];
+            px = (*vpu->grp_pos)[g*2];
+            py = (*vpu->grp_pos)[g*2 + 1];
        
 #ifdef _DEBUG_VPU
             LOGD("core.vpu: rendering sprite:");
             LOGD("...group %d, tile %d, h2: %d, v2: %d, hm: %d, vm: %d",
                     g, t, h2, v2, hm, vm);
-            LOGD("...palette %d, group.pos (%d, %d)", pi, px, py);
+            LOGD("...palette %d, group.pos (%d, %d)  offs.(%d, %d)",
+                    pi, px, py, xoffs, yoffs);
 #endif
 
 #define _MAX(x,y) ((x)>(y)?(x):(y))
-            startx = _MAX(0, px + (xoffs - 8) + (hm ? 7 + 8*h2 : 0));
+            startx = _MAX(0, px + xoffs + (hm ? 7 + 8*h2 : 0));
             endx = startx + (hm ? -(8 + 8*h2) : (8 + 8*h2));
             dx = hm ? (-1 - h2) : (1 + h2);
-            starty = _MAX(0, py + (yoffs - 8) + (vm ? 7 + 8*v2 : 0));
+            starty = _MAX(0, py + yoffs + (vm ? 7 + 8*v2 : 0));
             endy = starty + (vm ? -(8 + 8*v2) : (8 + 8*v2));
             dy = hm ? (-1 - v2) : (1 + v2);
 #undef _MAX
@@ -309,8 +312,10 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 
                     rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + hi]];
                     *fbp++ = rgb;
+                    if(h2) *fbp++ = rgb;
                     rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + lo]];
-                    *fbp = rgb;
+                    *fbp++ = rgb;
+                    if(h2) *fbp++ = rgb;
                 }
             }
         }

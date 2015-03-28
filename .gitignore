@@ -8,3 +8,5 @@ backup/*
 src/*.o
 src/core/*.o
 src/ui/*.o
+fb.png
+fb.rgba
