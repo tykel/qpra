@@ -166,16 +166,16 @@ void core_vpu_write_fb(struct core_vpu *vpu)
     for(l = 0; l < 2; ++l) {
         for(ty = 0; ty < VPU_TILE_YRES; ++ty) {
             int scroll_y = (!l ? *vpu->layer1_csy : *vpu->layer2_csy) % 32;
-            if(ty < scroll_y)
-                continue;
+            //if(ty < scroll_y)
+            //    continue;
             for(tx = 0; tx < VPU_TILE_XRES; ++tx) {
                 uint8_t *tile;
                 int index, x, y;
                 int scroll_x = (!l ? *vpu->layer1_csx : *vpu->layer2_csx) % 28;
                 int pi = !l ? core_vpu__pal_l1(vpu) : core_vpu__pal_l2(vpu);
 
-                if(tx < scroll_x)
-                    continue;
+                //if(tx < scroll_x)
+                //    continue;
 
                 index = !l ? (*vpu->layer1_tm)[ty * VPU_TILE_XRES] :
                                 (*vpu->layer2_tm)[ty * VPU_TILE_XRES];
@@ -195,10 +195,11 @@ void core_vpu_write_fb(struct core_vpu *vpu)
                     int i = (ty*8 + y + fsy)*VPU_TILE_XRES*8;
                     for(x = 0; x < (8 >> 1); ++x) {
                         uint8_t p = tile[y * (8>>1) + x];
-                        int hi, lo;
+                        int hi, lo, j;
                         struct rgba rgb, *fbp;
-                        
-                        fbp = (struct rgba *)&vpu->rgba_fb[(i + 2*x + fsx)*4];
+
+                        j = 4*(i + 2*x + fsx + 8*tx);
+                        fbp = (struct rgba *)&vpu->rgba_fb[j];
 
                         /* We use double X due to 4-bit palette indexes. */
                         hi = p >> 4;
