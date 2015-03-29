@@ -2,7 +2,11 @@
 
 .bank rom_fixed
 
-init:       mv a, $84           ; sprite Enable bit and H-doubling
+init:       mv a, v_handler0    ; load the initial video IRQ handler address
+            mv [$fffa], a       ; store it in the interrupt vector
+loop:       jp loop             ; loop until the video IRQ
+
+v_handler0: mv a, $84           ; set Enable bit and H-Double bit
             mv.b [$ea00], a     ; update sprite 0 reg.
             mv a, $01           ; tile index 1
             mv.b [$ea03], a     ; update sprite 0 reg.
@@ -12,18 +16,14 @@ init:       mv a, $84           ; sprite Enable bit and H-doubling
             mv.b [$e900], a     ; update palette 0, entry 0
             mv a, $89           ; color 'white' in global palette
             mv.b [$e901], a     ; update palette 0, entry 1
-            mv a, $0101         ; x = 1, y = 1
+            mv c, $0101         ; x = 1, y = 1
+            mv a, v_handler1    ; load the "real" video IRQ handler address
+            mv [$fffa], a       ; store it in the interrupt vector
+            rti
 
-loop:       mv [$eb00], a       ; update group 0 pos.
-            inc a               ; increment group x position
-            nop
-            nop
-            nop
-            nop
-            nop
-            nop
-            nop
-            jp loop             ; loop back to start
+v_handler1: mv [$eb00], c       ; update group 0 pos.
+            inc c               ; increment group x position
+            rti
 
 .bank tile_swap 0
 

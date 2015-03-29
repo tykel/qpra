@@ -18,8 +18,8 @@ extern int hrc_use_rtc;
 static char *instrnam[NUM_INSTRS] = {
     "nop", /* 00 */
     "int", /* 01 */
-    "rts", /* 02 */
-    "rti", /* 03 */
+    "rti", /* 02 */
+    "rts", /* 03 */
     "jp",  /* 04 */
     "cl",  /* 05 */
     "jz",  /* 06 */
@@ -66,6 +66,8 @@ int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
 
     cpu->mmu = mmu;
     memset(cpu->r, 0, sizeof(cpu->r));
+    cpu->r[R_S] = 0x9ffe;
+    cpu->r[R_F] |= FLAG_I;
     cpu->i_cycles = 0;
     cpu->i = malloc(sizeof(struct core_instr));
     if(cpu->i == NULL) {
@@ -143,29 +145,45 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         core_cpu_hrc_step(cpu);
         
     /* Handle interrupt if pending. */
-    if(cpu->interrupt != INT_NONE && (cpu->r[R_F] & FLAG_I) && *c == 0) {
-        switch(cpu->interrupt) {
-            case INT_USER_IRQ:
-                cpu->r[R_P] = 0xfffe;
-                break;
-            case INT_TIMER_IRQ:
-                cpu->r[R_P] = 0xfffc;
-                break;
-            case INT_VIDEO_IRQ:
-                cpu->r[R_P] = 0xfffa;
-                break;
-            case INT_AUDIO_IRQ:
-                cpu->r[R_P] = 0xfff8;
-                break;
+    if(cpu->interrupt != INT_NONE && (cpu->r[R_F] & FLAG_I) && !cpu->i_middle) {
+        if(*c == 0) {
+            cpu->r[R_S] -= 2;
+            core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
+            *c += 1;
+        } else if(*c == 1) {
+            cpu->r[R_S] -= 2;
+            core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
+            *c += 1;
+        } else if(*c == 2) {
+            switch(cpu->interrupt) {
+                case INT_USER_IRQ:
+                    core_mmu_rw_send(cpu->mmu, 0xfffe);
+                    break;
+                case INT_TIMER_IRQ:
+                    core_mmu_rw_send(cpu->mmu, 0xfffc);
+                    break;
+                case INT_VIDEO_IRQ:
+                    core_mmu_rw_send(cpu->mmu, 0xfffa);
+                    break;
+                case INT_AUDIO_IRQ:
+                    core_mmu_rw_send(cpu->mmu, 0xfff8);
+                    break;
+            }
+            *c += 1;
+
+        } else if(*c == 3) {
+            cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
+            cpu->interrupt = INT_NONE;
+            *c = 0;
         }
-        /* The instruction hasn't "really" started, so skip incrementing c. */
         return;
     }
 
     /* Each cycle has a state machine for every type of instruction. */
     if(*c == 0) {
+        cpu->i_middle = 1;
         memset(&p, 0, sizeof(p));
-            
+
         core_mmu_rw_send(cpu->mmu, cpu->r[R_P]);
         cpu->r[R_P] += 2;
 
@@ -225,6 +243,8 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         if(instr_is_void(cpu->i) || instr_dr_only(cpu->i)) {
             /* TODO: load memory operands when necessary. */
             i(cpu, &p);
+            if(INSTR_OP(cpu->i) == OP_RTS)
+                cpu->i_done = 1;
         } else if(instr_has_data(cpu->i)) {
             /* Data bytes have been read from memory */
             uint16_t t = core_mmu_rw_fetch(cpu->mmu);
@@ -297,6 +317,8 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         if(instr_is_void(cpu->i) || instr_dr_only(cpu->i)) {
             /* TODO: load memory operands when necessary. */
             i(cpu, &p);
+            if(INSTR_OP(cpu->i) == OP_RTI)
+                cpu->i_done = 1;
         } else if(instr_has_data(cpu->i)) {
             if(instr_is_srcptr(cpu->i)) {
                 if(instr_is_1op(cpu->i))
@@ -336,6 +358,8 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         if(instr_is_void(cpu->i) || instr_dr_only(cpu->i)) {
             /* TODO: load memory operands when necessary. */
             i(cpu, &p);
+            if(INSTR_OP(cpu->i) == OP_INT)
+                cpu->i_done = 1;
         } else if(instr_has_data(cpu->i)) {
             if(instr_is_srcptr(cpu->i)) {
                 if(instr_is_dstptr(cpu->i)) {
@@ -375,10 +399,12 @@ void core_cpu_i_instr(struct core_cpu *cpu)
     uint16_t pc = cpu->r[R_P];
     cpu->i_cycles = 0;
     cpu->i_done = 0;
+    cpu->i_middle = 0;
 
     do {
         core_cpu_i_cycle(cpu);
         //LOGD("core.cpu: ... cycle %d", cpu->i_cycles);
+        cpu->i_middle = 0;
     } while(!cpu->i_done);
 
     LOGV("core.cpu: %04x: %s (%d cycles)",
@@ -409,12 +435,12 @@ void core_cpu_i_op_nop(struct core_cpu *cpu, struct core_instr_params *p)
 void core_cpu_i_op_int(struct core_cpu *cpu, struct core_instr_params *p)
 {
     if(cpu->i_cycles == 1) {
-        core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
         cpu->r[R_S] -= 2;
+        core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
         cpu->interrupt = INT_USER_IRQ;
     } else if(cpu->i_cycles == 2) {
-        core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
         cpu->r[R_S] -= 2;
+        core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
     } else if(cpu->i_cycles == 3) {
         core_mmu_rw_send(cpu->mmu, 0xfffe);
     } else {
@@ -433,12 +459,12 @@ void core_cpu_i_op_rti(struct core_cpu *cpu, struct core_instr_params *p)
         core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
     } else if(cpu->i_cycles == 2) {
-        cpu->r[R_F] = core_mmu_rw_fetch(cpu->mmu);
+        cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
         core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
-        cpu->interrupt = INT_NONE;
+        //cpu->interrupt = INT_NONE;
     } else {
-        cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
+        cpu->r[R_F] = core_mmu_rw_fetch(cpu->mmu);
     }
 }
 
@@ -639,7 +665,8 @@ void core_cpu_i_op_ded(struct core_cpu *cpu, struct core_instr_params *p)
 void core_cpu_i_op_mv(struct core_cpu *cpu, struct core_instr_params *p)
 {
     p->op1 = p->op2;
-    cpu->r[R_F] = !p->op1 | ((p->op1 < 0) << 3);
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N);
+    cpu->r[R_F] |= !p->op1 | ((p->op1 < 0) << 3);
 }
 
 /*
@@ -651,7 +678,8 @@ void core_cpu_i_op_cmp(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 - p->op2;
     int32_t itemp = (int32_t)p->op1 - (int32_t)p->op2;
-    cpu->r[R_F] = !temp ||              /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||             /* Z */
             ((itemp > 0xffff) << 1) ||  /* C */
             ((itemp > 0x7fff) << 2) ||  /* O */
             ((temp < 0) << 3);          /* N */
@@ -665,7 +693,8 @@ void core_cpu_i_op_cmp(struct core_cpu *cpu, struct core_instr_params *p)
 void core_cpu_i_op_tst(struct core_cpu *cpu, struct core_instr_params *p)
 {
     uint16_t temp = p->op1 & p->op2;
-    cpu->r[R_F] = !temp || ((temp < 0) << 3);
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N);
+    cpu->r[R_F] |= !temp || ((temp < 0) << 3);
 }
 
 /*
@@ -678,7 +707,8 @@ void core_cpu_i_op_add(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 + p->op2;
     int32_t itemp = (int32_t)p->op1 + (int32_t)p->op2;
     p->op1 += p->op2;
-    cpu->r[R_F] = !temp ||             /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||            /* Z */
         ((itemp > 0xffff) << 1) ||     /* C */
         ((itemp > 0x7fff) << 2) ||     /* O */
         ((temp < 0) << 3);             /* N */
@@ -694,7 +724,8 @@ void core_cpu_i_op_sub(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 - p->op2;
     int32_t itemp = (int32_t)p->op1 - (int32_t)p->op2;
     p->op1 -= p->op2;
-    cpu->r[R_F] = !temp ||             /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||            /* Z */
         ((itemp > 0xffff) << 1) ||     /* C */
         ((itemp > 0x7fff) << 2) ||     /* O */
         ((temp < 0) << 3);             /* N */
@@ -710,7 +741,8 @@ void core_cpu_i_op_mul(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 * p->op2;
     int32_t itemp = (int32_t)p->op1 * (int32_t)p->op2;
     p->op1 *= p->op2;
-    cpu->r[R_F] = !temp ||             /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||            /* Z */
         ((itemp > 0xffff) << 1) ||     /* C */
         ((itemp > 0x7fff) << 2) ||     /* O */
         ((temp < 0) << 3);             /* N */
@@ -726,7 +758,8 @@ void core_cpu_i_op_div(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 / p->op2;
     int32_t itemp = (int32_t)p->op1 / (int32_t)p->op2;
     p->op1 /= p->op2;
-    cpu->r[R_F] = !temp ||             /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||            /* Z */
         ((itemp > 0xffff) << 1) ||     /* C */
         ((itemp > 0x7fff) << 2) ||     /* O */
         ((temp < 0) << 3);             /* N */
@@ -742,7 +775,8 @@ void core_cpu_i_op_lsl(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 << p->op2;
     int32_t itemp = (int32_t)p->op1 << (int32_t)p->op2;
     p->op1 <<= p->op2;
-    cpu->r[R_F] = !temp ||              /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||             /* Z */
             ((itemp > 0xffff) << 1) ||  /* C */
             ((itemp > 0x7fff) << 2) ||  /* O */
             ((temp < 0) << 3);          /* N */
@@ -758,7 +792,8 @@ void core_cpu_i_op_lsr(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 >> p->op2;
     uint32_t utemp = (uint32_t)p->op1 >> (uint32_t)p->op2;
     p->op1 >>= p->op2;
-    cpu->r[R_F] = !temp ||              /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||             /* Z */
             ((utemp > 0xffff) << 1) ||  /* C */
             ((utemp > 0x7fff) << 2) ||  /* O */
             ((temp < 0) << 3);          /* N */
@@ -774,7 +809,8 @@ void core_cpu_i_op_asr(struct core_cpu *cpu, struct core_instr_params *p)
     int16_t temp = *(int16_t *)&p->op1 >> *(int16_t *)&p->op2;
     int32_t itemp = *(int32_t *)&p->op1 >> *(int32_t *)&p->op2;
     *(int16_t *)&p->op1 >>= p->op2;
-    cpu->r[R_F] = !temp ||              /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||             /* Z */
             ((itemp > 0xffff) << 1) ||  /* C */
             ((itemp > 0x7fff) << 2) ||  /* O */
             ((temp < 0) << 3);          /* N */
@@ -790,7 +826,8 @@ void core_cpu_i_op_and(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 & p->op2;
     int32_t itemp = (int32_t)p->op1 & (int32_t)p->op2;
     p->op1 &= p->op2;
-    cpu->r[R_F] = !temp ||              /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||             /* Z */
             ((itemp > 0xffff) << 1) ||  /* C */
             ((itemp > 0x7fff) << 2) ||  /* O */
             ((temp < 0) << 3);          /* N */
@@ -806,7 +843,8 @@ void core_cpu_i_op_or(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 | p->op2;
     int32_t itemp = (int32_t)p->op1 | (int32_t)p->op2;
     p->op1 |= p->op2;
-    cpu->r[R_F] = !temp ||              /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||             /* Z */
             ((itemp > 0xffff) << 1) ||  /* C */
             ((itemp > 0x7fff) << 2) ||  /* O */
             ((temp < 0) << 3);          /* N */
@@ -822,7 +860,8 @@ void core_cpu_i_op_xor(struct core_cpu *cpu, struct core_instr_params *p)
     uint16_t temp = p->op1 ^ p->op2;
     int32_t itemp = (int32_t)p->op1 ^ (int32_t)p->op2;
     p->op1 ^= p->op2;
-    cpu->r[R_F] = !temp ||              /* Z */
+    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
+    cpu->r[R_F] |= !temp ||             /* Z */
             ((itemp > 0xffff) << 1) ||  /* C */
             ((itemp > 0x7fff) << 2) ||  /* O */
             ((temp < 0) << 3);          /* N */

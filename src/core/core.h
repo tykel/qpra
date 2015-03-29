@@ -11,6 +11,19 @@
 
 #include <stdint.h>
 
+#define CORE_CYCLES_S               3932160
+
+#ifdef _DEBUG
+#define CORE_CYCLES_F               20
+#define CORE_CYCLES_VBLANK          10
+#define CORE_CYCLES_F_PRE_VBLANK    10
+#else
+#define CORE_CYCLES_F               65536
+#define CORE_CYCLES_VBLANK          6000
+#define CORE_CYCLES_F_PRE_VBLANK    59536
+#endif
+
+
 enum core_buf_type {
     CORE_HDR_ROMF=0, CORE_HDR_ROMS=1, CORE_HDR_RAMF=2,
     CORE_HDR_RAMS=3, CORE_HDR_TILS=4, CORE_HDR_AUDS=5

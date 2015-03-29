@@ -248,6 +248,10 @@ int core_mmu_bank_select(struct core_mmu *mmu, enum core_mmu_bank bank,
             mmu->ram_s = ram_s[index];
             break;
         case B_TILE_SWAP:
+            if(!mmu->vpu->vblank) {
+                LOGV("core.vpu: bank select denied: vblank = 0");
+                break;
+            }
             mmu->tile_bank = index;
             mmu->tile_s = tile_s[index];
             break;
@@ -355,9 +359,13 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
         return mmu->ram_f[a];
     else if(a <= A_RAM_SWAP_END)
         return mmu->ram_s[a];
-    else if(a <= A_TILE_SWAP_END)
+    else if(a <= A_TILE_SWAP_END) {
+        if(!mmu->vpu->vblank) {
+            LOGV("core.vpu: read denied: vblank = 0");
+            return 0;
+        }
         return mmu->tile_s[a];
-    else if(a <= A_VPU_END)
+    } else if(a <= A_VPU_END)
         return core_vpu_readb(mmu->vpu, a);
     else if(a <= A_APU_END)
         return 0;//mmu->apu_readb(a);
@@ -377,7 +385,7 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
         LOGV("core.mmu: read  @ address $%04x: gamepad stub", a);
     else if(a >= A_PAD2_REG && a <= A_PAD2_REG_END)
         LOGV("core.mmu: read  @ address $%04x: gamepad stub", a);
-    else if((uint32_t)a <= A_INT_VEC)
+    else if(a <= A_INT_VEC_END)
         return mmu->intvec[a];
     else {
         LOGW("core.mmu: read  @ address $%04x: unhandled", a);
@@ -398,9 +406,13 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
         mmu->ram_f[a] = v;
     else if(a <= A_RAM_SWAP_END)
         mmu->ram_s[a] = v;
-    else if(a <= A_TILE_SWAP_END)
+    else if(a <= A_TILE_SWAP_END) {
+        if(!mmu->vpu->vblank) {
+            LOGV("core.vpu: write denied: vblank = 0");
+            return;
+        }
         mmu->tile_s[a] = v;
-    else if(a == A_TILE_BANK_SELECT)
+    } else if(a == A_TILE_BANK_SELECT)
         core_mmu_bank_select(mmu, B_TILE_SWAP, v);
     else if(a <= A_VPU_END)
         core_vpu_writeb(mmu->vpu, a, v);
@@ -424,7 +436,7 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
         core_cpu_hrc_settype(mmu->cpu->hrc, v);
     else if(a <= A_SERIAL_REG_END)
         LOGV("core.mmu: write @ address $%04x: serial stub", a);
-    else if((uint32_t)a <= A_INT_VEC)
+    else if(a <= A_INT_VEC_END)
         mmu->intvec[a] = v;
     else {
         LOGW("core.mmu: write @ address $%04x: unhandled", a);
@@ -447,7 +459,7 @@ static uint16_t core_mmu_readw(struct core_mmu *mmu, uint16_t a)
 /* Write a word to the correct device/bank part for that address. */
 static void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint16_t v)
 {
-    core_mmu_writeb(mmu, a, v & 0xff);
-    core_mmu_writeb(mmu, a + 1, (v >> 8));
+    core_mmu_writeb(mmu, a, (v >> 8));
+    core_mmu_writeb(mmu, a + 1, v & 0xff);
 }
 

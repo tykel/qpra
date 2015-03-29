@@ -61,17 +61,27 @@ void *core_entry(void *data)
 
     LOGD("Beginning emulation");
     while(!done()) {
-        for(int i = 0; i < 10; ++i) {
-            core_cpu_i_instr(core->cpu);
-        }
+        /*
+         * In the debug case, we run 5 cycles and pause until the user
+         * presses a key to resume. This allows for easier inspection of the
+         * state.
+         */
         core_vpu_update(core->vpu);
         core_vpu_write_fb(core->vpu);
+        for(int i = 0; i < CORE_CYCLES_F_PRE_VBLANK; ++i) {
+            core_cpu_i_instr(core->cpu);
+        }
+        core_vpu_begin_vblank(core->vpu);
+        for(int i = 0; i < CORE_CYCLES_VBLANK; ++i) {
+            core_cpu_i_instr(core->cpu);
+        }
+        core_vpu_end_vblank(core->vpu);
 #ifdef _DEBUG
         getc(stdin);
 #else
         struct timespec ts;
         ts.tv_sec = 0;
-        ts.tv_nsec = 100 * 1000 * 1000;
+        ts.tv_nsec = 16666666;
         nanosleep(&ts, NULL);
 #endif
     }

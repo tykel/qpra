@@ -58,6 +58,8 @@ struct core_cpu
     int i_cycles;
     /* Instruction done state. */
     int i_done;
+    /* Are we in the middle of an instruction? */
+    int i_middle;
 };
 
 /* Enum for symbolic register file access. */

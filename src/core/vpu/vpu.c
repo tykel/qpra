@@ -138,10 +138,9 @@ int core_vpu_init_palette(struct core_vpu *vpu, uint8_t *palette)
 }
 
 
-/* Perform a per-cycle update of the VPU. */
+/* Perform a per-frame state update of the VPU. */
 void core_vpu_update(struct core_vpu *vpu)
 {
-    /* XXX: Fix this. */
     vpu->tile_bank = vpu->cpu->mmu->tile_s;
 }
 
@@ -166,16 +165,16 @@ void core_vpu_write_fb(struct core_vpu *vpu)
     for(l = 0; l < 2; ++l) {
         for(ty = 0; ty < VPU_TILE_YRES; ++ty) {
             int scroll_y = (!l ? *vpu->layer1_csy : *vpu->layer2_csy) % 32;
-            //if(ty < scroll_y)
-            //    continue;
+            if(ty < scroll_y)
+                continue;
             for(tx = 0; tx < VPU_TILE_XRES; ++tx) {
                 uint8_t *tile;
                 int index, x, y;
                 int scroll_x = (!l ? *vpu->layer1_csx : *vpu->layer2_csx) % 28;
                 int pi = !l ? core_vpu__pal_l1(vpu) : core_vpu__pal_l2(vpu);
 
-                //if(tx < scroll_x)
-                //    continue;
+                if(tx < scroll_x)
+                    continue;
 
                 index = !l ? (*vpu->layer1_tm)[ty * VPU_TILE_XRES] :
                                 (*vpu->layer2_tm)[ty * VPU_TILE_XRES];
@@ -327,9 +326,26 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 }
 
 
-/* TODO: Switch through VPU address space segments to access right memory. */
+/* Signal the start of the VBlank period, by firing the video interrupt. */
+void core_vpu_begin_vblank(struct core_vpu *vpu)
+{
+    vpu->cpu->interrupt = INT_VIDEO_IRQ;
+    vpu->vblank = 1;
+}
+
+/* Signal the end of the VBlank period. */
+void core_vpu_end_vblank(struct core_vpu *vpu)
+{
+    vpu->vblank = 0;
+}
+
+
 uint8_t core_vpu_readb(struct core_vpu *vpu, uint16_t a)
 {
+    if(!vpu->vblank) {
+        LOGV("core.vpu: read denied: vblank = 0");
+        return 0;
+    }
 #ifdef _DEBUG_MEMORY
     LOGV("core.vpu: read byte @ $%04x", a);
 #endif
@@ -338,6 +354,10 @@ uint8_t core_vpu_readb(struct core_vpu *vpu, uint16_t a)
 
 void core_vpu_writeb(struct core_vpu *vpu, uint16_t a, uint8_t v)
 {
+    if(!vpu->vblank) {
+        LOGV("core.vpu: write denied: vblank = 0");
+        return;
+    }
 #ifdef _DEBUG_MEMORY
     LOGV("core.vpu: wrote %02x @ $%04x", v, a);
 #endif

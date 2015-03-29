@@ -48,7 +48,7 @@ static const uint16_t A_PAD2_REG_END = 0xfff3;
 static const uint16_t A_SERIAL_REG = 0xfff4;
 static const uint16_t A_SERIAL_REG_END = 0xfff7;
 static const uint16_t A_INT_VEC = 0xfff8;
-static const uint16_t A_END = 0xffff;
+static const uint16_t A_INT_VEC_END = 0xffff;
 
 
 /* Memory bank names, for the core_mmu_bank_select function. */ 

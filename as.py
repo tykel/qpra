@@ -9,8 +9,14 @@ import sys
 import re
 import struct
 
+anyPattern = r"""
+([a-zA-Z0-9_-]+:)?
+(?:.+)?
+$
+"""
+
 instrPattern = r"""
-([a-zA-Z_-]+:)?         # Label, optional
+([a-zA-Z0-9_-]+:)?         # Label, optional
 \s*
 ([a-z]+)([.][bw])?      # Instruction, required; and b/w suffix, optional
 \s*
@@ -88,12 +94,12 @@ def getAddrMode(nops, op1, op2, ds):
             else:
                 return 5
         else:
-            print 'error: invalid operand: ', op1
+            print 'nops1 1 error: invalid operand: ', op1
             return 0
     elif nops == 2:
         if re.match("[abcdef]", op1) is not None:
             if re.match("[abcdef]", op2) is not None:
-               return 6
+                return 6
             elif re.match("\[[abcdef]\]", op2) is not None:
                 return 7
             elif re.match("(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)", op2) is not None:
@@ -117,13 +123,13 @@ def getAddrMode(nops, op1, op2, ds):
                 else:
                     return 12
             else:
-                print 'error: invalid operand: ', op2
+                print 'nops2 1 error: invalid operand: ', op2
                 return 0
         elif re.match("\[[abcdef]\]", op1) is not None:
             if re.match("[abcdef]", op2) is not None:
                 return 8
             else:
-                print 'error: invalid operand: ', op2
+                print 'nop2 2 error: invalid operand: ', op2
                 return 0
         elif re.match("[abcdef]", op2) is not None:
             if re.match("\[(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)\]", op1) is not None:
@@ -137,7 +143,7 @@ def getAddrMode(nops, op1, op2, ds):
                 else:
                     return 14
             else:
-                print 'error: invalid operand: ', op1
+                print 'nops 2 3 error: invalid operand: ', op1
                 return 0
 
 
@@ -190,6 +196,7 @@ class instr:
     data = []
 
 def main():
+    argx = re.compile(anyPattern, re.VERBOSE)
     irgx = re.compile(instrPattern, re.VERBOSE)
     drgx = re.compile(dirPattern, re.VERBOSE)
 
@@ -203,6 +210,15 @@ def main():
         exit(0)
 
     # Parse the input assembly source file
+    f = open(sys.argv[1], "r")
+    for line in f:
+        result = argx.match(line)
+        if result is not None:
+            if result.group(1) is not None:
+                print 'Found label ', result.group(1)[:-1]
+                defs[result.group(1)[:-1]] = 0
+    f.close()
+
     f = open(sys.argv[1], "r")
     for line in f:
         # Handle directives

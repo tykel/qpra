@@ -82,6 +82,9 @@ struct core_vpu {
     struct core_cpu *cpu;
     struct core_mmu *mmu;
 
+    /* VBlank status flag. */
+    int vblank;
+
     /* Switchable tile bank. */
     uint8_t *tile_bank;
     /* Array representing remainder of VPU address space. */
@@ -121,6 +124,8 @@ int core_vpu_destroy(struct core_vpu *);
 
 void core_vpu_update(struct core_vpu *);
 void core_vpu_write_fb(struct core_vpu *);
+void core_vpu_begin_vblank(struct core_vpu *);
+void core_vpu_end_vblank(struct core_vpu *);
 
 uint8_t core_vpu_readb(struct core_vpu *, uint16_t);
 void core_vpu_writeb(struct core_vpu *, uint16_t, uint8_t);

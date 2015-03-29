@@ -105,27 +105,27 @@ lib_set_layer1_pi:  mv c, s         ; Save the stack pointer
 ; Functions to push various registers to the stack.
 ; No arguments.
 
-push_a:             mv [s], a
-                    ded s
+push_a:             ded s
+                    mv [s], a
                     rts
 
-push_b:             mv [s], b
-                    ded s
+push_b:             ded s
+                    mv [s], b
                     rts
 
-push_c:             mv [s], c
-                    ded s
+push_c:             ded s
+                    mv [s], c
                     rts
 
-push_d:             mv [s], d
-                    ded s
+push_d:             ded s
+                    mv [s], d
                     rts
 
-push_e:             mv [s], e
-                    ded s
+push_e:             ded s
+                    mv [s], e
                     rts
 
-push_f:             mv [s], f
-                    ded s
+push_f:             ded s
+                    mv [s], f
                     rts
                     
