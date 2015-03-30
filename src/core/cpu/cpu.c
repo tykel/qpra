@@ -194,8 +194,8 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
     } else if(*c == 1) {
         uint16_t t = core_mmu_rw_fetch(cpu->mmu);
         /* Instruction opcode read completed. */
-        cpu->i->ib0 = B_HI(t);
-        cpu->i->ib1 = B_LO(t);
+        cpu->i->ib0 = B_LO(t);
+        cpu->i->ib1 = B_HI(t);
         i = core_cpu_ops[INSTR_OP(cpu->i)];
         //LOGV("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
         
@@ -248,9 +248,9 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         } else if(instr_has_data(cpu->i)) {
             /* Data bytes have been read from memory */
             uint16_t t = core_mmu_rw_fetch(cpu->mmu);
-            cpu->i->db0 = B_HI(t);
+            cpu->i->db0 = B_LO(t);
             if(instr_has_dw(cpu->i)) {
-                cpu->i->db1 = B_LO(t);
+                cpu->i->db1 = B_HI(t);
 #ifdef _DEBUG
                 LOGV("core.cpu: data = %02x %02x", cpu->i->db0, cpu->i->db1);
 #endif
@@ -403,7 +403,7 @@ void core_cpu_i_instr(struct core_cpu *cpu)
 
     do {
         core_cpu_i_cycle(cpu);
-        //LOGD("core.cpu: ... cycle %d", cpu->i_cycles);
+        LOGV("core.cpu: ... cycle %d", cpu->i_cycles);
         cpu->i_middle = 0;
     } while(!cpu->i_done);
 

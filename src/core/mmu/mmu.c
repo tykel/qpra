@@ -449,8 +449,8 @@ static uint16_t core_mmu_readw(struct core_mmu *mmu, uint16_t a)
 {
     uint16_t result = 0;
 
-    result |= core_mmu_readb(mmu, a) << 8;
-    result |= core_mmu_readb(mmu, a + 1);
+    result |= core_mmu_readb(mmu, a);
+    result |= core_mmu_readb(mmu, a + 1) << 8;
 
     return result;
 }
@@ -459,7 +459,7 @@ static uint16_t core_mmu_readw(struct core_mmu *mmu, uint16_t a)
 /* Write a word to the correct device/bank part for that address. */
 static void core_mmu_writew(struct core_mmu *mmu, uint16_t a, uint16_t v)
 {
-    core_mmu_writeb(mmu, a, (v >> 8));
-    core_mmu_writeb(mmu, a + 1, v & 0xff);
+    core_mmu_writeb(mmu, a, (v & 0xff));
+    core_mmu_writeb(mmu, a + 1, v >> 8);
 }
 
