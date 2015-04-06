@@ -272,7 +272,7 @@ void core_vpu_write_fb(struct core_vpu *vpu)
             dx = hm ? (-1 - h2) : (1 + h2);
             starty = _MAX(0, py + yoffs + (vm ? 7 + 8*v2 : 0));
             endy = starty + (vm ? -(8 + 8*v2) : (8 + 8*v2));
-            dy = hm ? (-1 - v2) : (1 + v2);
+            dy = hm ? -1 : 1; //(-1 - v2) : (1 + v2);
 #undef _MAX
             tile = &vpu->tile_bank[t * VPU_TILE_SZ];
 #ifdef _DEBUG_VPU
@@ -298,24 +298,27 @@ void core_vpu_write_fb(struct core_vpu *vpu)
             LOGD("core.vpu: starty: %d, dy: %d, endy: %d", starty, dy, endy);
 #endif
 
-            for(y = starty, ty = 0; y != endy; y += dy, ++ty) {
-                for(x = startx, tx = 0; tx < 4; x += 2*dx, ++tx) {
-                    uint8_t p;
-                    uint8_t hi, lo;
-                    struct rgba rgb, *fbp;
+            for(y = starty, ty = 0; y != endy; ++ty) {
+                int vr;
+                for(vr = 0; vr < v2+1; ++vr, y += dy) {
+                    for(x = startx, tx = 0; tx < 4; x += 2*dx, ++tx) {
+                        uint8_t p;
+                        uint8_t hi, lo;
+                        struct rgba rgb, *fbp;
 
-                    p = tile[ty * (8>>1) + tx];
+                        p = tile[ty * (8>>1) + tx];
 
-                    hi = p >> 4;
-                    lo = p & 0xf;
-                    fbp = (struct rgba *)&vpu->rgba_fb[(y*VPU_XRES + x) * 4];
+                        hi = p >> 4;
+                        lo = p & 0xf;
+                        fbp = (struct rgba *)&vpu->rgba_fb[(y*VPU_XRES + x) * 4];
 
-                    rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + hi]];
-                    *fbp++ = rgb;
-                    if(h2) *fbp++ = rgb;
-                    rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + lo]];
-                    *fbp++ = rgb;
-                    if(h2) *fbp++ = rgb;
+                        rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + hi]];
+                        *fbp++ = rgb;
+                        if(h2) *fbp++ = rgb;
+                        rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + lo]];
+                        *fbp++ = rgb;
+                        if(h2) *fbp++ = rgb;
+                    }
                 }
             }
         }

@@ -4,9 +4,10 @@
 
 init:       mv a, v_handler0    ; load the initial video IRQ handler address
             mv [$fffa], a       ; store it in the interrupt vector
+
 loop:       jp loop             ; loop until the video IRQ
 
-v_handler0: mv a, $84           ; set Enable bit and H-Double bit
+v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             mv.b [$ea00], a     ; update sprite 0 reg.
             mv a, $01           ; tile index 1
             mv.b [$ea03], a     ; update sprite 0 reg.
@@ -23,6 +24,8 @@ v_handler0: mv a, $84           ; set Enable bit and H-Double bit
 
 v_handler1: mv [$eb00], c       ; update group 0 pos.
             inc c               ; increment group x position
+            lsl c, 8
+            inc c
             rti
 
 .bank tile_swap 0
