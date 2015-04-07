@@ -340,9 +340,9 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             } else if(instr_is_dstptr(cpu->i)) {
                 (INSTR_OPSZ(cpu->i) == OP_16) ?
                     core_mmu_ww_send(cpu->mmu, INSTR_D16(cpu->i),
-                            cpu->r[INSTR_RX(cpu->i)]) :
+                            cpu->r[INSTR_RY(cpu->i)]) :
                     core_mmu_wb_send(cpu->mmu, INSTR_D16(cpu->i),
-                            cpu->r[INSTR_RX(cpu->i)]);
+                            cpu->r[INSTR_RY(cpu->i)]);
             }
         } else if(instr_is_srcptr(cpu->i)) {
             if(instr_is_dstptr(cpu->i)) {

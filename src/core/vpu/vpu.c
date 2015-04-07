@@ -267,12 +267,12 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 #endif
 
 #define _MAX(x,y) ((x)>(y)?(x):(y))
-            startx = _MAX(0, px + xoffs + (hm ? 7 + 8*h2 : 0));
+            startx = _MAX(0, px + xoffs + (hm ? 7 + 7*h2 : 0));
             endx = startx + (hm ? -(8 + 8*h2) : (8 + 8*h2));
             dx = hm ? (-1 - h2) : (1 + h2);
             starty = _MAX(0, py + yoffs + (vm ? 7 + 8*v2 : 0));
             endy = starty + (vm ? -(8 + 8*v2) : (8 + 8*v2));
-            dy = hm ? -1 : 1; //(-1 - v2) : (1 + v2);
+            dy = vm ? -1 : 1; //(-1 - v2) : (1 + v2);
 #undef _MAX
             tile = &vpu->tile_bank[t * VPU_TILE_SZ];
 #ifdef _DEBUG_VPU
@@ -310,6 +310,12 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 
                         hi = p >> 4;
                         lo = p & 0xf;
+                        if(hm) {
+                            uint8_t temp = hi;
+                            hi = lo;
+                            lo = temp;
+                        }
+
                         fbp = (struct rgba *)&vpu->rgba_fb[(y*VPU_XRES + x) * 4];
 
                         rgb = pal_fixed[(*vpu->pals)[pi*VPU_PALETTE_SZ + hi]];

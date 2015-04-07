@@ -361,7 +361,7 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
         return mmu->ram_s[a];
     else if(a <= A_TILE_SWAP_END) {
         if(!mmu->vpu->vblank) {
-            LOGV("core.vpu: read denied: vblank = 0");
+            LOGE("core.vpu: read denied: vblank = 0");
             return 0;
         }
         return mmu->tile_s[a];
@@ -408,7 +408,7 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
         mmu->ram_s[a] = v;
     else if(a <= A_TILE_SWAP_END) {
         if(!mmu->vpu->vblank) {
-            LOGV("core.vpu: write denied: vblank = 0");
+            LOGE("core.vpu: write denied: vblank = 0");
             return;
         }
         mmu->tile_s[a] = v;
