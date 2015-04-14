@@ -11,16 +11,16 @@
 
 #include <stdint.h>
 
-#define CORE_CYCLES_S               3932160
+#define CORE_CYCLES_S               5360520
 
 #ifdef _DEBUG
 #define CORE_CYCLES_F               20
 #define CORE_CYCLES_VBLANK          10
 #define CORE_CYCLES_F_PRE_VBLANK    10
 #else
-#define CORE_CYCLES_F               65536
-#define CORE_CYCLES_VBLANK          6000
-#define CORE_CYCLES_F_PRE_VBLANK    59536
+#define CORE_CYCLES_F               89342
+#define CORE_CYCLES_VBLANK          1023
+#define CORE_CYCLES_F_PRE_VBLANK    88319
 #endif
 
 

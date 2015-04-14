@@ -11,6 +11,8 @@
 
 #include <stdint.h>
 
+#define VPU_CLOCK_HZ        21442080
+
 #define VPU_TILEMAP_SIZE    0x480
 #define VPU_TILE_SZ         32
 #define VPU_NUM_SPRITES     64
