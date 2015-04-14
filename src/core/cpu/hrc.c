@@ -8,41 +8,6 @@
 
 #include "core/cpu/hrc.h"
 
-int hrc_use_rtc = 1; 
-
-int hrc_hz[] = {
-    -1,
-    60, 120, 240, 480, 960,
-    -1, -1
-};
-
-int hrc_cycles[] = {
-    -1,
-    65536, 32768, 16384, 8192, 4096,
-    -1, -1
-};
-
-int hrc_us[] = {
-    -1,
-    16667, 8334, 4167, 2084, 1042,
-    -1, -1
-};
-
-
-/* Update the elapsed and remaining time value for the HRC. */
-static inline void core_cpu_hrc__diff(struct core_hrc *hrc)
-{
-    int old_us = hrc->elapsed_us;
-    if(hrc_use_rtc) {
-        hrc->elapsed_us = (hrc->cur.tv_sec - hrc->start.tv_sec) * 1000 +
-            (hrc->cur.tv_nsec - hrc->start.tv_nsec) / 1000;
-        //hrc->elapsed_hz = ((long)CPU_FREQ_HZ * (long)hrc->elapsed_us) / 1000;
-        hrc->v -= hrc->elapsed_us - old_us;
-    } else {
-        hrc->v -= 1;
-    }
-}
-
 
 /* Signal an interrupt request (IRQ) for the next instruction. */
 static inline void core_cpu_hrc__trigger_int(struct core_cpu *cpu)
@@ -63,57 +28,57 @@ void core_cpu_hrc_step(struct core_cpu *cpu)
 {
     struct core_hrc *hrc = cpu->hrc;
 
-    if(hrc->type == HRC_DISABLED ||
-       hrc->type == HRC_DISABLED6 || hrc->type == HRC_DISABLED7)
+    if(hrc->v & 1 && !hrc->enabled) {
+        if(hrc->v & 2) {
+            /* Determine number of cycles until next horizontal sync pulse. */
+            hrc->total_cycles = VPU_SCANLINE_CYCLES -
+                    (cpu->total_cycles % VPU_SCANLINE_CYCLES);
+        } else {
+            /* Plain old cycle timing. */
+            hrc->total_cycles = (hrc->v & 0xfffc) << 2;
+        }
+        hrc->enabled = 1;
+    } else if(!(hrc->v & 1) && hrc->enabled) {
+        hrc->enabled = 0;
+    }
+
+    if(!hrc->enabled)
         return;
 
     /* Update the elapsed time; if we have reached one counter cycle, trigger
      * an interrupt. */
-    clock_gettime(CLOCK_MONOTONIC, &hrc->cur);
-    core_cpu_hrc__diff(hrc);
-    if(hrc->v <= 0) {
+    hrc->elapsed_cycles += 1;
+    if(hrc->total_cycles == hrc->elapsed_cycles) {
         core_cpu_hrc__trigger_int(cpu);
         /* Reset the timer for the next period. */
-        clock_gettime(CLOCK_MONOTONIC, &hrc->start);
-        //hrc->elapsed_hz = 0;
-        hrc->elapsed_us = 0;
-        hrc->v = hrc_use_rtc ? hrc_us[hrc->type] : hrc_cycles[hrc->type];
+        hrc->elapsed_cycles = 0;
+        if(hrc->v & 2) {
+            /* We are at the start of H-SYNC, so the next one is exactly one
+             * scanline away. */
+            hrc->total_cycles = VPU_SCANLINE_CYCLES;
+        }
     }
 }
 
 
-/* 
- * Set the timer mode, enabling it if the mode is not DISABLED.
- * Resets the HRC state.
- */
-void core_cpu_hrc_settype(struct core_hrc *hrc, int type)
+void core_cpu_hrc_sethib(struct core_hrc *hrc, int v)
 {
-    switch(type) {
-        case HRC_60HZ:
-        case HRC_120HZ:
-        case HRC_240HZ:
-        case HRC_480HZ:
-        case HRC_960HZ:
-            hrc->type = type;
-            break;
-        case HRC_DISABLED:
-        case HRC_DISABLED6:
-        case HRC_DISABLED7:
-        default:
-            hrc->type = HRC_DISABLED;
-            break;
-    }
+    hrc->v |= v << 8;
+}
 
-    clock_gettime(CLOCK_MONOTONIC, &hrc->start);
-    hrc->elapsed_hz = 0;
-    hrc->elapsed_us = 0;
-    hrc->v = hrc_use_rtc ? hrc_us[hrc->type] : hrc_cycles[hrc->type];
+void core_cpu_hrc_setlob(struct core_hrc *hrc, int v)
+{
+    hrc->v |= v & 0xff;
 }
 
 
-/* Return the currently used counter mode. */
-int core_cpu_hrc_gettype(struct core_hrc *hrc)
+int core_cpu_hrc_gethib(struct core_hrc *hrc)
 {
-    return hrc->type;
+    return hrc->v >> 8;
+}
+
+int core_cpu_hrc_getlob(struct core_hrc *hrc)
+{
+    return hrc->v & 0xff;
 }
 
