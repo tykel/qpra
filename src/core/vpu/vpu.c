@@ -74,6 +74,14 @@ static inline int core_vpu__spr_tile(struct core_vpu_sprite *spr) {
 }
 
 
+static void core_vpu__fetch_data(struct core_vpu *, int, int);
+static struct rgba core_vpu__get_l2px(struct core_vpu *, int, int);
+static struct rgba core_vpu__get_l1px(struct core_vpu *, int, int);
+static struct rgba core_vpu__get_spx(struct core_vpu *, int, int, int);
+static int core_vpu__get_l1t(struct core_vpu *vpu, int, int);
+static int core_vpu__get_st(struct core_vpu *vpu, int, int, int);
+static void core_vpu__write_px(struct core_vpu *, int, int, struct rgba);
+
 /* 
  * Initialize the VPU state. This includes allocating the struct, and setting
  * the dependencies to the CPU, tile bank and framebuffer.
@@ -148,6 +156,16 @@ void core_vpu_update(struct core_vpu *vpu)
 /* 
  * Write the tile layers and the sprites to the shared framebuffer.
  * It will then be presented at the next screen refresh.
+ *
+ * NOTE: This no longer accurately represents the function of the VPU.
+ * It is not cycle- or scanline-accurate; instead, it can only provide
+ * frame-level consistency of the picture, and does not track the memory
+ * accesses or the internal temporaries of the VPU.
+ *
+ * Instead, simply run core_vpu_cycle() every cycle. It will update state and
+ * do all the right things at the right time. It will also flip buffers.
+ *
+ * Use this only for a speed-hack.
  */
 void core_vpu_write_fb(struct core_vpu *vpu)
 {
@@ -267,12 +285,14 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 #endif
 
 #define _MAX(x,y) ((x)>(y)?(x):(y))
-            startx = _MAX(0, px + xoffs + (hm ? 7 + 7*h2 : 0));
-            endx = startx + (hm ? -(8 + 8*h2) : (8 + 8*h2));
+#define _MIN(x,y) ((x)<(y)?(x):(y))
+            startx = _MIN(_MAX(0, px + xoffs + (hm ? 7 + 7*h2 : 0)), 288);
+            endx = _MIN(startx + (hm ? -(8 + 8*h2) : (8 + 8*h2)), 288);
             dx = hm ? (-1 - h2) : (1 + h2);
-            starty = _MAX(0, py + yoffs + (vm ? 7 + 8*v2 : 0));
-            endy = starty + (vm ? -(8 + 8*v2) : (8 + 8*v2));
+            starty = _MIN(_MAX(0, py + yoffs + (vm ? 7 + 8*v2 : 0)), 256);
+            endy = _MIN(starty + (vm ? -(8 + 8*v2) : (8 + 8*v2)), 256);
             dy = vm ? -1 : 1; //(-1 - v2) : (1 + v2);
+#undef _MIN
 #undef _MAX
             tile = &vpu->tile_bank[t * VPU_TILE_SZ];
 #ifdef _DEBUG_VPU
@@ -332,6 +352,218 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 
     /* The framebuffer is now ready for use by the UI thread. */
     ui_unlock_fb();
+}
+
+
+/* 
+ * Re-entrant function for VPU emulation.
+ *
+ * Tile data for the layers' tiles and sprites on the current scanline
+ * are loaded into buffers for drawing, along with the current palettes.
+ * 
+ * The VPU then renders them following their depth and mirroring/doubling.
+ */
+void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
+{
+    static int scanline = 0;
+    int c = total_cycles % VPU_XRES_CYCLES;
+
+    /* First, update state if necessary. */
+    core_vpu_update(vpu);
+
+    if(scanline == 12 && c == 0)
+        core_vpu_end_vblank(vpu);
+
+    /* Scanlines 0-11 and 240 - 261 are V-BLANK lines. We do nothing there.
+     * Otherwise, we are in pre-render or render lines. */
+    else if(scanline >= 16 && scanline < 240) {
+       
+        core_vpu__fetch_data(vpu, scanline, c);
+
+        /* Cycles 0-24: H-SYNC. */
+        /* Cycles 25-64: Back porch and colorburst. */
+
+        /* Cycles 65-320: Pixel data! */
+        if(c >= 65 && c < 320) {
+            struct rgba out, l1, l2, s[VPU_NUM_SPRITES];
+            int i, l1t, st[VPU_NUM_SPRITES];
+
+            /* First get RGB and transparency data for each layer and sprite's
+             * pixel. */
+            l1 = core_vpu__get_l1px(vpu, scanline, c);
+            l1t = core_vpu__get_l1t(vpu, scanline, c);
+            l2 = core_vpu__get_l2px(vpu, scanline, c);
+            for(i = 0; i < VPU_NUM_SPRITES; ++i) {
+                s[i] = core_vpu__get_spx(vpu, scanline, c, i);
+                st[i] = core_vpu__get_st(vpu, scanline, c, i);
+            }
+
+            /* Next, draw each pixel on top of each other if not transparent. */
+            out.r = l1t ? l2.r : l1.r;
+            out.g = l1t ? l2.g : l1.g;
+            out.b = l1t ? l2.b : l1.b;
+            for(i = 0; i < VPU_NUM_SPRITES; ++i) {
+                if(!st[i]) {
+                    out.r = s[i].r;
+                    out.g = s[i].g;
+                    out.b = s[i].b;
+                }
+            }
+            
+            /* Finally, output the pixel to the framebuffer. */
+            core_vpu__write_px(vpu, scanline, c, out);
+        }
+
+    } else if(scanline == 240 && c == 0) {
+        core_vpu_begin_vblank(vpu);
+    }
+    
+    /* The last cycle of the scanline is a good time to increment
+     * the scanline counter, and wrap it if necessary! */
+    if(c == 340) {
+        scanline = (scanline + 1) % VPU_YRES_SCANLINES;
+        /* XXX: this might be a good place to implement the double
+         * buffering's framebuffer swap. */
+        if(scanline == 0) {
+            LOGW("core.vpu: frame end");
+        }
+    }
+}
+
+
+/* Makes the correct memory accesses for a given scanline and cycle. */
+static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
+{
+    int a = c - 25;
+    int y = scanline - 16;
+
+    /* The VPU is idle during the vertical blanking interval. */
+    if(scanline < 16 || scanline >= 240)
+        return;
+
+    /* The VPU is also idle during every scanline during its horizontal sync
+     * period. */
+    if(c < 25)
+        return;
+    
+    /* For "regular" scanlines, the following reads are performed:
+     * - layer 1 tile data (4*32 = 128 bytes; 64 reads)
+     * - layer 2 tile data (4*32 = 128 bytes; 64 reads)
+     * - sprite 0-63 tile data (4*64 = 256; 128 reads)
+     * This adds up to 256 reads per scanline.
+     */
+    if(a < 64) {
+        /* At cycle 0, there is no previous read request to read back. */
+        if(a > 0) 
+            vpu->sl__l1data[a - 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+        /* Fetch the tile data for tile[y][x], where:
+         * - y = (scanline - 12) / 8 (tiles are 8 scanlines tall)
+         * - x = (c - 25) / (8/2) (tiles are 4 BYTES wide) */
+        core_mmu_rw_send_vpu(vpu->mmu,
+                (VPU_A_TILE_BANK + (a % 4)*2 +
+                 (*vpu->layer1_tm)[(y >> 3)*VPU_TILE_XRES_FULL + (a >> 2)]));
+    } else if(a < 128) {
+        /* At cycle 64, read back last read request for layer 1. */
+        if(a == 64)
+            vpu->sl__l1data[a - 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+        else
+            vpu->sl__l2data[a - 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+        /* Fetch the tile data for tile[y][x], where:
+         * - y = (scanline - 12) / 8 (tiles are 8 scanlines tall)
+         * - x = (c - 25) / (8/2) (tiles are 4 BYTES wide) */
+        core_mmu_rw_send_vpu(vpu->mmu,
+                (VPU_A_TILE_BANK + (a % 4)*2 +
+                 (*vpu->layer2_tm)[(y >> 3)*VPU_TILE_XRES_FULL + (a >> 2)]));
+    } else if(a < 256) {
+        int i = (scanline - 12) >> 2;
+        /* At cycle 128, read back last read request for layer 2. */
+        if(a == 128)
+            vpu->sl__l2data[a - 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+        else
+            vpu->sl__sdata[a - 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+        /* Fetch the tile data for sprite i, where:
+         * - i = (scanline - 12) / (8/2) */ 
+        core_mmu_rw_send_vpu(vpu->mmu,
+                (VPU_A_TILE_BANK + (a % 4)*2 +
+                 (*vpu->spr_ctl)[i*4 + (a >> 2) + 3]));
+    } else if(a == 256) {
+        /* Fetch the last word of sprite data. */
+        vpu->sl__sdata[a - 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+    }
+}
+
+
+/* Return layer 2's tilemap pixel at the current scanline and cycle. */
+static struct rgba core_vpu__get_l2px(struct core_vpu *vpu, int scanline, int c)
+{
+    int x = (c - 65) & 255;
+    int tx = x / 8;
+    uint8_t e = vpu->sl__l2data[tx];
+
+    return vpu->sl__l2pal[e];
+}
+
+
+/* Return layer 1's tilemap pixel at the current scanline and cycle. */
+static struct rgba core_vpu__get_l1px(struct core_vpu *vpu, int scanline, int c)
+{
+    int x = (c - 65) & 255;
+    int tx = x / 8;
+    uint8_t e = vpu->sl__l1data[tx];
+
+    return vpu->sl__l1pal[e];
+}
+
+
+/* Return sprite i's pixel at the current scanline and cycle. */
+static struct rgba core_vpu__get_spx(struct core_vpu *vpu, int scanline, int c,
+                                    int i)
+{
+    struct rgba dummy = { 0 };
+    int x = (c - 65) & 255;
+    int tx = (x - *vpu->grp_pos[2*i]) / 8;
+    if(tx < 0)
+        return dummy;
+    uint8_t e = vpu->sl__sdata[i*4 + tx];
+
+    return vpu->sl__spal[e];
+}
+
+
+/* Return whether layer 1's tilemap pixel at the current scanline and cycle is
+ * transparent. */
+static int core_vpu__get_l1t(struct core_vpu *vpu, int scanline, int c)
+{
+    int x = (c - 65) & 255;
+    int tx = x / 8;
+
+    return !!vpu->sl__l1data[tx];
+}
+
+
+/* Return whether sprite i's pixel at the current scanline and cycle is
+ * transparent. */
+static int core_vpu__get_st(struct core_vpu *vpu, int scanline, int c, int i)
+{
+    int x = (c - 65) & 255;
+    int tx = (x - *vpu->grp_pos[2*i]) / 8;
+    if(tx < 0)
+        return 1;
+    
+    return !!vpu->sl__sdata[i*4 + tx];
+}
+
+
+/* Write the given pixel to the virtual framebuffer at the position
+ * corresponding to the current scanline's c-th cycle. */
+static void core_vpu__write_px(struct core_vpu *vpu, int scanline, int c,
+                                struct rgba pixel)
+{
+    int x = c - 65;
+    int y = scanline - 16;
+    struct rgba *fb = (struct rgba *) vpu->rgba_fb;
+
+    fb[y * 256 + x] = pixel;
 }
 
 

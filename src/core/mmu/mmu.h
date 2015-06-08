@@ -112,10 +112,10 @@ struct core_mmu
     uint8_t dpcm_s_total;
 
     /* MDR, MAR and state for read/write requests. */
-    enum core_mmu_access pending;
-    uint16_t a;
-    uint16_t v;
-    size_t vsz;
+    enum core_mmu_access pending_cpu, pending_vpu;
+    uint16_t a_cpu, a_vpu;
+    uint16_t v_cpu, v_vpu;
+    size_t vsz_cpu, vsz_vpu;
 };
 
 struct core_temp_banks;
@@ -136,13 +136,21 @@ int core_mmu_bank_select(struct core_mmu *, enum core_mmu_bank, uint8_t);
  * Similarly, a write requests is posted in cycle 0, and is effective in cycle
  * 1, although we do not need to read anything back.
  */
-int core_mmu_rb_send(struct core_mmu *, uint16_t);
-uint8_t core_mmu_rb_fetch(struct core_mmu *);
-int core_mmu_wb_send(struct core_mmu *, uint16_t, uint8_t);
+int core_mmu_rb_send_cpu(struct core_mmu *, uint16_t);
+uint8_t core_mmu_rb_fetch_cpu(struct core_mmu *);
+int core_mmu_wb_send_cpu(struct core_mmu *, uint16_t, uint8_t);
 
-int core_mmu_rw_send(struct core_mmu *, uint16_t);
-uint16_t core_mmu_rw_fetch(struct core_mmu *);
-int core_mmu_ww_send(struct core_mmu *, uint16_t, uint16_t);
+int core_mmu_rb_send_vpu(struct core_mmu *, uint16_t);
+uint8_t core_mmu_rb_fetch_vpu(struct core_mmu *);
+int core_mmu_wb_send_vpu(struct core_mmu *, uint16_t, uint8_t);
+
+int core_mmu_rw_send_cpu(struct core_mmu *, uint16_t);
+uint16_t core_mmu_rw_fetch_cpu(struct core_mmu *);
+int core_mmu_ww_send_cpu(struct core_mmu *, uint16_t, uint16_t);
+
+int core_mmu_rw_send_vpu(struct core_mmu *, uint16_t);
+uint16_t core_mmu_rw_fetch_vpu(struct core_mmu *);
+int core_mmu_ww_send_vpu(struct core_mmu *, uint16_t, uint16_t);
 
 void core_mmu_update(struct core_mmu *);
 

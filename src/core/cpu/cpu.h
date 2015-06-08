@@ -60,6 +60,8 @@ struct core_cpu
     int i_done;
     /* Are we in the middle of an instruction? */
     int i_middle;
+
+    uint64_t total_cycles;
 };
 
 /* Enum for symbolic register file access. */
@@ -286,5 +288,7 @@ void core_cpu_i_op_or(struct core_cpu *, struct core_instr_params *);
 void core_cpu_i_op_xor(struct core_cpu *, struct core_instr_params *);
 
 static void (*core_cpu_ops[32])(struct core_cpu *, struct core_instr_params *);
+
+extern char *instrnam[NUM_INSTRS];
 
 #endif

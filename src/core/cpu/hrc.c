@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "core/cpu/hrc.h"
+#include "log.h"
 
 
 /* Signal an interrupt request (IRQ) for the next instruction. */
@@ -38,8 +39,10 @@ void core_cpu_hrc_step(struct core_cpu *cpu)
             hrc->total_cycles = (hrc->v & 0xfffc) << 2;
         }
         hrc->enabled = 1;
+        LOGV("core.cpu: timer enabled, delay = %d", hrc->total_cycles);
     } else if(!(hrc->v & 1) && hrc->enabled) {
         hrc->enabled = 0;
+        LOGV("core.cpu: timer disabled");
     }
 
     if(!hrc->enabled)

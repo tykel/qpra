@@ -22,8 +22,12 @@
 #define VPU_PALETTE_SZ      16
 #define VPU_XRES            256
 #define VPU_YRES            224
+#define VPU_XRES_CYCLES     341
+#define VPU_YRES_SCANLINES  262
 #define VPU_TILE_XRES       32
 #define VPU_TILE_YRES       28
+#define VPU_TILE_XRES_FULL  36
+#define VPU_TILE_YRES_FULL  32
 #define VPU_NUM_SPR_LAYERS  8
 
 #define VPU_LAYER1_PI       0b11110000
@@ -42,6 +46,7 @@
 #define VPU_SPR_XOFFSET     0b11110000
 #define VPU_SPR_YOFFSET     0b00001111
 
+#define VPU_A_TILE_BANK     0xc000
 #define VPU_A_L1TM          0xe000
 #define VPU_A_L1TM_END      0xe47f
 #define VPU_A_L2TM          0xe480
@@ -117,6 +122,14 @@ struct core_vpu {
 
     /* RGBA32 framebuffer pointer. */
     uint8_t *rgba_fb;
+
+    /* Scanline temporaries (read in for each scanline by the VPU). */
+    uint8_t sl__l1data[32 * 4];
+    uint8_t sl__l2data[32 * 4];
+    uint8_t sl__sdata[64 * 4];
+    struct rgba sl__l1pal[16];
+    struct rgba sl__l2pal[16];
+    struct rgba sl__spal[16];
 };
 
 /* Function declarations. */
@@ -124,6 +137,7 @@ int core_vpu_init(struct core_vpu **, struct core_cpu *);
 int core_vpu_init_palette(struct core_vpu *, uint8_t *);
 int core_vpu_destroy(struct core_vpu *);
 
+void core_vpu_cycle(struct core_vpu *, int);
 void core_vpu_update(struct core_vpu *);
 void core_vpu_write_fb(struct core_vpu *);
 void core_vpu_begin_vblank(struct core_vpu *);

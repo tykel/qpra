@@ -61,29 +61,46 @@ void *core_entry(void *data)
 
     LOGD("Beginning emulation");
     while(!done()) {
-        /*
-         * In the debug case, we run 5 cycles and pause until the user
-         * presses a key to resume. This allows for easier inspection of the
-         * state.
-         */
-        core_vpu_update(core->vpu);
-        core_vpu_write_fb(core->vpu);
-        for(int i = 0; i < CORE_CYCLES_F_PRE_VBLANK; ++i) {
-            core_cpu_i_instr(core->cpu);
-        }
-        core_vpu_begin_vblank(core->vpu);
-        for(int i = 0; i < CORE_CYCLES_VBLANK; ++i) {
-            core_cpu_i_instr(core->cpu);
-        }
-        core_vpu_end_vblank(core->vpu);
+        //core_vpu_update(core->vpu);
+        //core_vpu_write_fb(core->vpu);
+        int cycles = 0;
+        uint16_t pc = core->cpu->r[R_P];
+        core->cpu->i_cycles = 0;
+        core->cpu->i_done = 0;
+        core->cpu->i_middle = 0;
+
+        do {
+            /* Apply any pending read/write requests on the bus. */
+            core_mmu_update(core->cpu->mmu);
+            /* Execute an instruction cycle in the CPU. */
+            core_cpu_i_cycle(core->cpu);
+            LOGV("core.cpu: ... cycle %d", core->cpu->i_cycles);
+            /* Execute a cycle in the VPU. */
+            core_vpu_cycle(core->vpu, core->cpu->total_cycles);
+
+            //core->cpu->i_middle = 0;
+            cycles += 1;
+        } while(!core->cpu->i_done);
+
+        LOGV("core.cpu: %04x: %s (%d cycles)",
+             pc, instrnam[INSTR_OP(core->cpu->i)], core->cpu->i_cycles);
+        //core_vpu_begin_vblank(core->vpu);
+        //for(int i = 0; i < CORE_CYCLES_VBLANK; ++i) {
+        //    core_cpu_i_instr(core->cpu);
+        //}
+        //core_vpu_end_vblank(core->vpu);
 #ifdef _DEBUG
         getc(stdin);
 #else
-        struct timespec ts;
-        ts.tv_sec = 0;
-        ts.tv_nsec = 16666666;
-        nanosleep(&ts, NULL);
+        /* One frame's worth of cycles have been executed, so time to pause. */
+        if(cycles >= CORE_CYCLES_F) {
+            struct timespec ts;
+            ts.tv_sec = 0;
+            ts.tv_nsec = 16666666;
+            nanosleep(&ts, NULL);
+        }
 #endif
+        LOGD("Finished one frame");
     }
     LOGD("Finished emulation");
 

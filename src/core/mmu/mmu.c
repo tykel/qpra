@@ -248,10 +248,6 @@ int core_mmu_bank_select(struct core_mmu *mmu, enum core_mmu_bank bank,
             mmu->ram_s = ram_s[index];
             break;
         case B_TILE_SWAP:
-            if(!mmu->vpu->vblank) {
-                LOGV("core.vpu: bank select denied: vblank = 0");
-                break;
-            }
             mmu->tile_bank = index;
             mmu->tile_s = tile_s[index];
             break;
@@ -264,58 +260,116 @@ int core_mmu_bank_select(struct core_mmu *mmu, enum core_mmu_bank bank,
 }
 
 
+/* CPU memory operations. */
 /* Place a Read-Byte request on the bus. */
-int core_mmu_rb_send(struct core_mmu *mmu, uint16_t a)
+int core_mmu_rb_send_cpu(struct core_mmu *mmu, uint16_t a)
 {
-    mmu->pending = MMU_READ;
-    mmu->a = a;
-    mmu->vsz = 1;
+    mmu->pending_cpu = MMU_READ;
+    mmu->a_cpu = a;
+    mmu->vsz_cpu = 1;
     return 1;
 }
 
 
 /* Return the result of the Read-Byte request from the MDR. */
-uint8_t core_mmu_rb_fetch(struct core_mmu *mmu)
+uint8_t core_mmu_rb_fetch_cpu(struct core_mmu *mmu)
 {
-    return (uint8_t) mmu->v;
+    return (uint8_t) mmu->v_cpu;
 }
 
 
 /* Place a Write-Byte request on the bus. */
-int core_mmu_wb_send(struct core_mmu *mmu, uint16_t a, uint8_t v)
+int core_mmu_wb_send_cpu(struct core_mmu *mmu, uint16_t a, uint8_t v)
 {
-    mmu->pending = MMU_WRITE;
-    mmu->a = a;
-    mmu->v = v;
-    mmu->vsz = 1;
+    mmu->pending_cpu = MMU_WRITE;
+    mmu->a_cpu = a;
+    mmu->v_cpu = v;
+    mmu->vsz_cpu = 1;
     return 1;
 }
 
 
 /* Place a Read-Word request on the bus. */
-int core_mmu_rw_send(struct core_mmu *mmu, uint16_t a)
+int core_mmu_rw_send_cpu(struct core_mmu *mmu, uint16_t a)
 {
-    mmu->pending = MMU_READ;
-    mmu->a = a;
-    mmu->vsz = 2;
+    mmu->pending_cpu = MMU_READ;
+    mmu->a_cpu = a;
+    mmu->vsz_cpu = 2;
     return 1;
 }
 
 
 /* Return the result of the Read-Word request from the MDR. */
-uint16_t core_mmu_rw_fetch(struct core_mmu *mmu)
+uint16_t core_mmu_rw_fetch_cpu(struct core_mmu *mmu)
 {
-    return mmu->v;
+    return mmu->v_cpu;
 }
 
 
 /* Place a Write-Word request on the bus. */
-int core_mmu_ww_send(struct core_mmu *mmu, uint16_t a, uint16_t v)
+int core_mmu_ww_send_cpu(struct core_mmu *mmu, uint16_t a, uint16_t v)
 {
-    mmu->pending = MMU_WRITE;
-    mmu->a = a;
-    mmu->v = v;
-    mmu->vsz = 2;
+    mmu->pending_cpu = MMU_WRITE;
+    mmu->a_cpu = a;
+    mmu->v_cpu = v;
+    mmu->vsz_cpu = 2;
+    return 1;
+}
+
+
+/* VPU memory operations */
+/* Place a Read-Byte request on the bus. */
+int core_mmu_rb_send_vpu(struct core_mmu *mmu, uint16_t a)
+{
+    mmu->pending_vpu = MMU_READ;
+    mmu->a_vpu = a;
+    mmu->vsz_vpu = 1;
+    return 1;
+}
+
+
+/* Return the result of the Read-Byte request from the MDR. */
+uint8_t core_mmu_rb_fetch_vpu(struct core_mmu *mmu)
+{
+    return (uint8_t) mmu->v_vpu;
+}
+
+
+/* Place a Write-Byte request on the bus. */
+int core_mmu_wb_send_vpu(struct core_mmu *mmu, uint16_t a, uint8_t v)
+{
+    mmu->pending_vpu = MMU_WRITE;
+    mmu->a_vpu = a;
+    mmu->v_vpu = v;
+    mmu->vsz_vpu = 1;
+    return 1;
+}
+
+
+/* Place a Read-Word request on the bus. */
+int core_mmu_rw_send_vpu(struct core_mmu *mmu, uint16_t a)
+{
+    mmu->pending_vpu = MMU_READ;
+    mmu->a_vpu = a;
+    mmu->vsz_vpu = 2;
+    return 1;
+}
+
+
+/* Return the result of the Read-Word request from the MDR. */
+uint16_t core_mmu_rw_fetch_vpu(struct core_mmu *mmu)
+{
+    return mmu->v_vpu;
+}
+
+
+/* Place a Write-Word request on the bus. */
+int core_mmu_ww_send_vpu(struct core_mmu *mmu, uint16_t a, uint16_t v)
+{
+    mmu->pending_vpu = MMU_WRITE;
+    mmu->a_vpu = a;
+    mmu->v_vpu = v;
+    mmu->vsz_vpu = 2;
     return 1;
 }
 
@@ -323,28 +377,46 @@ int core_mmu_ww_send(struct core_mmu *mmu, uint16_t a, uint16_t v)
 /* Apply any pending memory operations on the bus. */
 void core_mmu_update(struct core_mmu *mmu)
 {
-    if(mmu->pending == MMU_READ) {
-        if(mmu->vsz == 1)
-            mmu->v = core_mmu_readb(mmu, mmu->a);
+    if(mmu->pending_cpu == MMU_READ) {
+        if(mmu->vsz_cpu == 1)
+            mmu->v_cpu = core_mmu_readb(mmu, mmu->a_cpu);
         else
-            mmu->v = core_mmu_readw(mmu, mmu->a);
-    } else if(mmu->pending == MMU_WRITE) {
-        if(mmu->vsz == 1)
-            core_mmu_writeb(mmu, mmu->a, mmu->v);
+            mmu->v_cpu = core_mmu_readw(mmu, mmu->a_cpu);
+    } else if(mmu->pending_cpu == MMU_WRITE) {
+        if(mmu->vsz_cpu == 1)
+            core_mmu_writeb(mmu, mmu->a_cpu, mmu->v_cpu);
         else
-            core_mmu_writew(mmu, mmu->a, mmu->v);
+            core_mmu_writew(mmu, mmu->a_cpu, mmu->v_cpu);
     }
-
-    mmu->pending = MMU_NONE;
+    mmu->pending_cpu = MMU_NONE;
+    
+    if(mmu->pending_vpu == MMU_READ) {
+        if(mmu->vsz_vpu == 1)
+            mmu->v_vpu = core_mmu_readb(mmu, mmu->a_vpu);
+        else
+            mmu->v_vpu = core_mmu_readw(mmu, mmu->a_vpu);
+    } else if(mmu->pending_vpu == MMU_WRITE) {
+        if(mmu->vsz_vpu == 1)
+            core_mmu_writeb(mmu, mmu->a_vpu, mmu->v_vpu);
+        else
+            core_mmu_writew(mmu, mmu->a_vpu, mmu->v_vpu);
+    }
+    mmu->pending_vpu = MMU_NONE;
 }
 
 
 /*---------------------------------------------------------------------------*/
 
 /* Check for a pending memory access. */
-static inline int core_mmu_pending(struct core_mmu *mmu)
+static inline int core_mmu_pending_cpu(struct core_mmu *mmu)
 {
-    return mmu->pending != MMU_NONE;
+    return mmu->pending_cpu != MMU_NONE;
+}
+
+/* Check for a pending memory access. */
+static inline int core_mmu_pending_vpu(struct core_mmu *mmu)
+{
+    return mmu->pending_vpu != MMU_NONE;
 }
 
 /* Read a byte from the correct device/bank for that address. */
@@ -360,10 +432,6 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
     else if(a <= A_RAM_SWAP_END)
         return mmu->ram_s[a];
     else if(a <= A_TILE_SWAP_END) {
-        if(!mmu->vpu->vblank) {
-            LOGE("core.vpu: read denied: vblank = 0");
-            return 0;
-        }
         return mmu->tile_s[a];
     } else if(a <= A_VPU_END)
         return core_vpu_readb(mmu->vpu, a);
@@ -378,7 +446,9 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
     else if(a == A_RAM_BANK_SELECT)
         return mmu->ram_s_bank;
     else if(a == A_HIRES_CTR)
-        return core_cpu_hrc_gettype(mmu->cpu->hrc);
+        return core_cpu_hrc_getlob(mmu->cpu->hrc);
+    else if(a == A_HIRES_CTR + 1)
+        return core_cpu_hrc_gethib(mmu->cpu->hrc);
     else if(a <= A_SERIAL_REG_END)
         LOGV("core.mmu: write @ address $%04x: serial stub", a);
     else if(a >= A_PAD1_REG && a <= A_PAD1_REG_END)
@@ -407,10 +477,6 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     else if(a <= A_RAM_SWAP_END)
         mmu->ram_s[a] = v;
     else if(a <= A_TILE_SWAP_END) {
-        if(!mmu->vpu->vblank) {
-            LOGE("core.vpu: write denied: vblank = 0");
-            return;
-        }
         mmu->tile_s[a] = v;
     } else if(a == A_TILE_BANK_SELECT)
         core_mmu_bank_select(mmu, B_TILE_SWAP, v);
@@ -433,7 +499,9 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     else if(a == A_RAM_BANK_SELECT)
         core_mmu_bank_select(mmu, B_RAM_SWAP, v);
     else if(a == A_HIRES_CTR)
-        core_cpu_hrc_settype(mmu->cpu->hrc, v);
+        core_cpu_hrc_setlob(mmu->cpu->hrc, v);
+    else if(a == A_HIRES_CTR + 1)
+        core_cpu_hrc_sethib(mmu->cpu->hrc, v);
     else if(a <= A_SERIAL_REG_END)
         LOGV("core.mmu: write @ address $%04x: serial stub", a);
     else if(a <= A_INT_VEC_END)

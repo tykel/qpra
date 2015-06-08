@@ -15,7 +15,7 @@
 extern int hrc_use_rtc;
 
 /* Map of instruction opcode names to strings, for logging. */
-static char *instrnam[NUM_INSTRS] = {
+char *instrnam[NUM_INSTRS] = {
     "nop", /* 00 */
     "int", /* 01 */
     "rti", /* 02 */
@@ -109,6 +109,13 @@ int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
     core_cpu_ops[0x1e] = core_cpu_i_op_or;
     core_cpu_ops[0x1f] = core_cpu_i_op_not;
 
+    cpu->hrc = malloc(sizeof(struct core_hrc));
+    if(cpu->hrc == NULL) {
+        LOGW("Could not allocate cpu timer core; exiting");
+        return 0;
+    }
+    memset(cpu->hrc, 0, sizeof(struct core_hrc));
+
     return 1;
 }
 
@@ -116,6 +123,7 @@ int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
 /* Destroys the core_cpu structure, freeing its memory. */ 
 void core_cpu_destroy(struct core_cpu *cpu)
 {
+    free(cpu->hrc);
     free(cpu);
     cpu = NULL;
 }
@@ -137,42 +145,38 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
     static void (*i)(struct core_cpu *, struct core_instr_params *);
     int *c = &cpu->i_cycles;
 
-    /* Apply any pending read/write requests on the bus. */
-    core_mmu_update(cpu->mmu);
-
-    /* If we are using cpu cycles for the timer, do it here. */
-    if(!hrc_use_rtc)
-        core_cpu_hrc_step(cpu);
+    core_cpu_hrc_step(cpu);
+    cpu->total_cycles += 1;
         
     /* Handle interrupt if pending. */
     if(cpu->interrupt != INT_NONE && (cpu->r[R_F] & FLAG_I) && !cpu->i_middle) {
         if(*c == 0) {
             cpu->r[R_S] -= 2;
-            core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
+            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
             *c += 1;
         } else if(*c == 1) {
             cpu->r[R_S] -= 2;
-            core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
+            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
             *c += 1;
         } else if(*c == 2) {
             switch(cpu->interrupt) {
                 case INT_USER_IRQ:
-                    core_mmu_rw_send(cpu->mmu, 0xfffe);
+                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffe);
                     break;
                 case INT_TIMER_IRQ:
-                    core_mmu_rw_send(cpu->mmu, 0xfffc);
+                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffc);
                     break;
                 case INT_VIDEO_IRQ:
-                    core_mmu_rw_send(cpu->mmu, 0xfffa);
+                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffa);
                     break;
                 case INT_AUDIO_IRQ:
-                    core_mmu_rw_send(cpu->mmu, 0xfff8);
+                    core_mmu_rw_send_cpu(cpu->mmu, 0xfff8);
                     break;
             }
             *c += 1;
 
         } else if(*c == 3) {
-            cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
+            cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
             cpu->interrupt = INT_NONE;
             *c = 0;
         }
@@ -184,7 +188,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         cpu->i_middle = 1;
         memset(&p, 0, sizeof(p));
 
-        core_mmu_rw_send(cpu->mmu, cpu->r[R_P]);
+        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_P]);
         cpu->r[R_P] += 2;
 
         p.p = cpu->r[R_P];
@@ -192,7 +196,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         p.f = cpu->r[R_F];
 
     } else if(*c == 1) {
-        uint16_t t = core_mmu_rw_fetch(cpu->mmu);
+        uint16_t t = core_mmu_rw_fetch_cpu(cpu->mmu);
         /* Instruction opcode read completed. */
         cpu->i->ib0 = B_LO(t);
         cpu->i->ib1 = B_HI(t);
@@ -219,21 +223,21 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         /* Fetch data byte/word after instruction. */
         } else if(instr_has_data(cpu->i)) {
             /* Post read request for data bytes */
-            core_mmu_rw_send(cpu->mmu, cpu->r[R_P]);
+            core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_P]);
             cpu->r[R_P] += instr_has_dw(cpu->i) ? 2 : 1;
             p.p = cpu->r[R_P];
         /* Fetch memory operand from source register. */
         } else if(instr_is_srcptr(cpu->i)) {
             if(instr_is_1op(cpu->i)) {
                 if(INSTR_OPSZ(cpu->i) == OP_16)
-                    core_mmu_rw_send(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
+                    core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
                 else
-                    core_mmu_rb_send(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
+                    core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
             } else {
                 if(INSTR_OPSZ(cpu->i) == OP_16)
-                    core_mmu_rw_send(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
+                    core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
                 else
-                    core_mmu_rb_send(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
+                    core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
             }
         } else {
             LOGE("core.cpu: invalid state reached (cycle 2)");
@@ -247,7 +251,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
                 cpu->i_done = 1;
         } else if(instr_has_data(cpu->i)) {
             /* Data bytes have been read from memory */
-            uint16_t t = core_mmu_rw_fetch(cpu->mmu);
+            uint16_t t = core_mmu_rw_fetch_cpu(cpu->mmu);
             cpu->i->db0 = B_LO(t);
             if(instr_has_dw(cpu->i)) {
                 cpu->i->db1 = B_HI(t);
@@ -274,14 +278,14 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             if(instr_is_srcptr(cpu->i)) {
                 if(instr_is_1op(cpu->i))
                     if(INSTR_OPSZ(cpu->i) == OP_16)
-                        core_mmu_rw_send(cpu->mmu, cpu->r[INSTR_RX(cpu->i)]);
+                        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)]);
                     else
-                        core_mmu_rb_send(cpu->mmu, cpu->r[INSTR_RX(cpu->i)]);
+                        core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)]);
                 else
                     if(INSTR_OPSZ(cpu->i) == OP_16)
-                        core_mmu_rw_send(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
+                        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
                     else
-                        core_mmu_rb_send(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
+                        core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
             /* Operate directly on data; nothing further to fetch. */
             } else {
                 i(cpu, &p);
@@ -295,13 +299,13 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             /* Data has arrived from memory, read back */
             if(instr_is_1op(cpu->i)) {
                 p.op1 = (INSTR_OPSZ(cpu->i) == OP_16) ? 
-                    core_mmu_rw_fetch(cpu->mmu) :
-                    core_mmu_rb_fetch(cpu->mmu);
+                    core_mmu_rw_fetch_cpu(cpu->mmu) :
+                    core_mmu_rb_fetch_cpu(cpu->mmu);
             } else {
                 p.op1 = cpu->r[INSTR_RX(cpu->i)];
                 p.op2 = (INSTR_OPSZ(cpu->i) == OP_16) ? 
-                    core_mmu_rw_fetch(cpu->mmu) :
-                    core_mmu_rb_fetch(cpu->mmu);
+                    core_mmu_rw_fetch_cpu(cpu->mmu) :
+                    core_mmu_rb_fetch_cpu(cpu->mmu);
             }
 
             i(cpu, &p);
@@ -323,13 +327,13 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             if(instr_is_srcptr(cpu->i)) {
                 if(instr_is_1op(cpu->i))
                     p.op1 = (INSTR_OPSZ(cpu->i) == OP_16) ?
-                        core_mmu_rw_fetch(cpu->mmu) :
-                        core_mmu_rb_fetch(cpu->mmu);
+                        core_mmu_rw_fetch_cpu(cpu->mmu) :
+                        core_mmu_rb_fetch_cpu(cpu->mmu);
                 else {
                     p.op1 = cpu->r[INSTR_RX(cpu->i)];
                     p.op2 = (INSTR_OPSZ(cpu->i) == OP_16) ?
-                        core_mmu_rw_fetch(cpu->mmu) :
-                        core_mmu_rb_fetch(cpu->mmu);
+                        core_mmu_rw_fetch_cpu(cpu->mmu) :
+                        core_mmu_rb_fetch_cpu(cpu->mmu);
                 }
 
                 i(cpu, &p);
@@ -339,16 +343,16 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
                 }
             } else if(instr_is_dstptr(cpu->i)) {
                 (INSTR_OPSZ(cpu->i) == OP_16) ?
-                    core_mmu_ww_send(cpu->mmu, INSTR_D16(cpu->i),
+                    core_mmu_ww_send_cpu(cpu->mmu, INSTR_D16(cpu->i),
                             cpu->r[INSTR_RY(cpu->i)]) :
-                    core_mmu_wb_send(cpu->mmu, INSTR_D16(cpu->i),
+                    core_mmu_wb_send_cpu(cpu->mmu, INSTR_D16(cpu->i),
                             cpu->r[INSTR_RY(cpu->i)]);
             }
         } else if(instr_is_srcptr(cpu->i)) {
             if(instr_is_dstptr(cpu->i)) {
                 (INSTR_OPSZ(cpu->i) == OP_16) ?
-                    core_mmu_ww_send(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1) :
-                    core_mmu_wb_send(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1);
+                    core_mmu_ww_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1) :
+                    core_mmu_wb_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1);
             }
         } else {
             LOGE("core.cpu: reached error state (cycle 4)");
@@ -364,8 +368,8 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             if(instr_is_srcptr(cpu->i)) {
                 if(instr_is_dstptr(cpu->i)) {
                     (INSTR_OPSZ(cpu->i) == OP_16) ?
-                        core_mmu_ww_send(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1) :
-                        core_mmu_wb_send(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1);
+                        core_mmu_ww_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1) :
+                        core_mmu_wb_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1);
                     cpu->i_done = 1;
                 }
             } else if(instr_is_dstptr(cpu->i)) {
@@ -436,15 +440,15 @@ void core_cpu_i_op_int(struct core_cpu *cpu, struct core_instr_params *p)
 {
     if(cpu->i_cycles == 1) {
         cpu->r[R_S] -= 2;
-        core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
+        core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
         cpu->interrupt = INT_USER_IRQ;
     } else if(cpu->i_cycles == 2) {
         cpu->r[R_S] -= 2;
-        core_mmu_ww_send(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
+        core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
     } else if(cpu->i_cycles == 3) {
-        core_mmu_rw_send(cpu->mmu, 0xfffe);
+        core_mmu_rw_send_cpu(cpu->mmu, 0xfffe);
     } else {
-        cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
+        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
     }
 }
 
@@ -456,15 +460,15 @@ void core_cpu_i_op_int(struct core_cpu *cpu, struct core_instr_params *p)
 void core_cpu_i_op_rti(struct core_cpu *cpu, struct core_instr_params *p)
 {
     if(cpu->i_cycles == 1) {
-        core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
+        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
     } else if(cpu->i_cycles == 2) {
-        cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
-        core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
+        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
+        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
         //cpu->interrupt = INT_NONE;
     } else {
-        cpu->r[R_F] = core_mmu_rw_fetch(cpu->mmu);
+        cpu->r[R_F] = core_mmu_rw_fetch_cpu(cpu->mmu);
     }
 }
 
@@ -476,10 +480,10 @@ void core_cpu_i_op_rti(struct core_cpu *cpu, struct core_instr_params *p)
 void core_cpu_i_op_rts(struct core_cpu *cpu, struct core_instr_params *p)
 {
     if(cpu->i_cycles == 1) {
-        core_mmu_rw_send(cpu->mmu, cpu->r[R_S]);
+        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
     } else {
-        cpu->r[R_P] = core_mmu_rw_fetch(cpu->mmu);
+        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
     }
 }
 
@@ -497,7 +501,7 @@ void core_cpu_i__call(struct core_cpu *cpu,
 {
     if(cpu->i_cycles == p->start_cycle) {
         if(p->f & flag || !flag) {
-            core_mmu_ww_send(cpu->mmu, p->s, p->p);
+            core_mmu_ww_send_cpu(cpu->mmu, p->s, p->p);
             cpu->r[R_S] -= 2;
             cpu->r[R_P] = p->op1;
         }
