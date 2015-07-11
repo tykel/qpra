@@ -13,9 +13,9 @@ v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             mv.b [$ea03], a     ; update sprite 0 reg.
             mv a, 0             ; use palette 0
             mv [$eb81], a       ; update sprite palette reg.
-            mv a, $03           ; random color
+            mv a, $04           ; dark gray 
             mv.b [$e900], a     ; update palette 0, entry 0
-            mv a, $89           ; color 'white' in global palette
+            mv a, $dd           ; color 'white' in global palette
             mv.b [$e901], a     ; update palette 0, entry 1
             mv c, $0101         ; x = 1, y = 1
             mv a, v_handler1    ; load the "real" video IRQ handler address
@@ -30,7 +30,7 @@ v_handler1: mv [$eb00], c       ; update group 0 pos.
 
 .bank tile_swap 0
 
-.db $00,$00,$00,$00,
+.db $00,$11,$10,$10,
 .db $00,$00,$00,$00,
 .db $01,$00,$01,$00,
 .db $00,$00,$00,$00,

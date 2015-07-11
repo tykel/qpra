@@ -201,7 +201,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         cpu->i->ib0 = B_LO(t);
         cpu->i->ib1 = B_HI(t);
         i = core_cpu_ops[INSTR_OP(cpu->i)];
-        //LOGV("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
+        //LOGW("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
         
         /* Nothing else to fetch. */
         if(instr_is_void(cpu->i)) {

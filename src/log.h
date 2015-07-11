@@ -21,13 +21,13 @@ void log_end();
 #define LOG_LEVEL 1
 #endif
 
-#if LOG_LEVEL == 2
+#if LOG_LEVEL >= 2
 #define LOGV log_verbose
 #define LOGD log_debug
 #elif LOG_LEVEL == 1
 #define LOGV log_null
 #define LOGD log_debug
-#else
+#elif LOG_LEVEL == 0
 #define LOGV log_null
 #define LOGD log_null
 #endif

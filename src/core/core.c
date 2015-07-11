@@ -39,6 +39,8 @@ void *core_entry(void *data)
 {
     struct core_system *core;
     struct core_temp_banks banks;
+    struct timespec tslf;
+    int cycles = 0;
 
     struct arg_pair *pair = (struct arg_pair *)data;
     
@@ -58,12 +60,13 @@ void *core_entry(void *data)
         LOGE("System initialization failed; exiting");
         return NULL;
     }
+    
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tslf);
 
     LOGD("Beginning emulation");
     while(!done()) {
         //core_vpu_update(core->vpu);
         //core_vpu_write_fb(core->vpu);
-        int cycles = 0;
         uint16_t pc = core->cpu->r[R_P];
         core->cpu->i_cycles = 0;
         core->cpu->i_done = 0;
@@ -95,12 +98,20 @@ void *core_entry(void *data)
         /* One frame's worth of cycles have been executed, so time to pause. */
         if(cycles >= CORE_CYCLES_F) {
             struct timespec ts;
+            
+            clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+            LOGD("frame: % 3d.%04dms",
+                 (ts.tv_nsec - tslf.tv_nsec)/1000000,
+                 ((ts.tv_nsec - tslf.tv_nsec)%1000000)/1000);
+            tslf = ts;
+            
             ts.tv_sec = 0;
             ts.tv_nsec = 16666666;
             nanosleep(&ts, NULL);
+            
+            cycles = 0;
         }
 #endif
-        LOGD("Finished one frame");
     }
     LOGD("Finished emulation");
 

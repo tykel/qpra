@@ -424,23 +424,23 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
 {
     /* Check which memory bank to access, or which handler to use. */
     if(a <= A_ROM_FIXED_END)
-        return mmu->rom_f[a];
+        return mmu->rom_f[a - A_ROM_FIXED];
     else if(a <= A_ROM_SWAP_END)
-        return mmu->rom_s[a];
+        return mmu->rom_s[a - A_ROM_SWAP];
     else if(a <= A_RAM_FIXED_END)
-        return mmu->ram_f[a];
+        return mmu->ram_f[a - A_RAM_FIXED];
     else if(a <= A_RAM_SWAP_END)
-        return mmu->ram_s[a];
+        return mmu->ram_s[a - A_RAM_SWAP];
     else if(a <= A_TILE_SWAP_END) {
-        return mmu->tile_s[a];
+        return mmu->tile_s[a - A_TILE_SWAP];
     } else if(a <= A_VPU_END)
         return core_vpu_readb(mmu->vpu, a);
     else if(a <= A_APU_END)
         return 0;//mmu->apu_readb(a);
     else if(a <= A_DPCM_SWAP_END)
-        return mmu->dpcm_s[a];
+        return mmu->dpcm_s[a - A_DPCM_SWAP];
     else if(a <= A_CART_FIXED_END)
-        return mmu->cart_f[a];
+        return mmu->cart_f[a - A_CART_FIXED];
     else if(a == A_ROM_BANK_SELECT)
         return mmu->rom_s_bank;
     else if(a == A_RAM_BANK_SELECT)
@@ -456,7 +456,7 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
     else if(a >= A_PAD2_REG && a <= A_PAD2_REG_END)
         LOGV("core.mmu: read  @ address $%04x: gamepad stub", a);
     else if(a <= A_INT_VEC_END)
-        return mmu->intvec[a];
+        return mmu->intvec[a - A_INT_VEC];
     else {
         LOGW("core.mmu: read  @ address $%04x: unhandled", a);
         return 0;
@@ -469,15 +469,15 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
 {
     /* Check which memory bank to access, or which handler to use. */
     if(a <= A_ROM_FIXED_END)
-        mmu->rom_f[a] = v;
+        mmu->rom_f[a - A_ROM_FIXED] = v;
     else if(a <= A_ROM_SWAP_END)
-        mmu->rom_s[a] = v;
+        mmu->rom_s[a - A_ROM_SWAP] = v;
     else if(a <= A_RAM_FIXED_END)
-        mmu->ram_f[a] = v;
+        mmu->ram_f[a - A_RAM_FIXED] = v;
     else if(a <= A_RAM_SWAP_END)
-        mmu->ram_s[a] = v;
+        mmu->ram_s[a - A_RAM_SWAP] = v;
     else if(a <= A_TILE_SWAP_END) {
-        mmu->tile_s[a] = v;
+        mmu->tile_s[a - A_TILE_SWAP] = v;
     } else if(a == A_TILE_BANK_SELECT)
         core_mmu_bank_select(mmu, B_TILE_SWAP, v);
     else if(a <= A_VPU_END)
@@ -487,11 +487,11 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     else if(a <= A_APU_END)
         ;//mmu->apu_writeb(a, v);
     else if(a <= A_DPCM_SWAP_END)
-        mmu->dpcm_s[a] = v;
+        mmu->dpcm_s[a - A_DPCM_SWAP] = v;
     else if(a <= A_FIXED0_END)
         LOGW("core.mmu: write @ address $%04x: unhandled", a);
     else if(a <= A_CART_FIXED_END)
-        mmu->cart_f[a] = v;
+        mmu->cart_f[a - A_CART_FIXED] = v;
     else if(a <= A_FIXED1_END)
         LOGW("core.mmu: write @ address $%04x: unhandled", a);
     else if(a == A_ROM_BANK_SELECT)
@@ -505,7 +505,7 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     else if(a <= A_SERIAL_REG_END)
         LOGV("core.mmu: write @ address $%04x: serial stub", a);
     else if(a <= A_INT_VEC_END)
-        mmu->intvec[a] = v;
+        mmu->intvec[a - A_INT_VEC] = v;
     else {
         LOGW("core.mmu: write @ address $%04x: unhandled", a);
     }
