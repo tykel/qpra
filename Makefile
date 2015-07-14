@@ -11,38 +11,39 @@ MAIN_SRCS:=main.c log.c
 MAIN_SRCS_ALL:=$(MAIN_SRCS) log.h
 
 MAIN_SRCS:=$(addprefix $(SRC)/,$(MAIN_SRCS))
+MAIN_SRCS_OBJ:=$(MAIN_SRCS:.c=.o)
 MAIN_SRCS_ALL:=$(addprefix $(SRC)/,$(MAIN_SRCS_ALL))
 
 CORE_SRCS:=core.c cpu/cpu.c cpu/hrc.c mmu/mmu.c vpu/vpu.c
 CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h cpu/hrc.h mmu/mmu.h vpu/vpu.h
 
 CORE_SRCS:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS))
+CORE_SRCS_OBJ:=$(CORE_SRCS:.c=.o)
 CORE_SRCS_ALL:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS_ALL))
 
 UI_SRCS:=ui.c ui_gtk.c gtk_opengl.c
 UI_SRCS_ALL:=$(UI_SRCS) ui.h ui_gtk.h gtk_opengl.h
 
 UI_SRCS:=$(addprefix $(SRC)/$(UI)/,$(UI_SRCS))
+UI_SRCS_OBJ:=$(UI_SRCS:.c=.o)
 UI_SRCS_ALL:=$(addprefix $(SRC)/$(UI)/,$(UI_SRCS_ALL))
 
-LIBS:=$(shell pkg-config --libs gtk+-3.0 gmodule-2.0) 
+LIBS:=-lGL $(shell pkg-config --libs gtk+-3.0 gmodule-2.0) 
 LIBS+=$(shell sdl2-config --libs)
 
 .PHONY: all clean
 
 all: qpra test.kpr
 
-qpra: $(MAIN_SRCS_ALL) libcore.so libui.so
-	$(CC) $(CFLAGS) $(MAIN_SRCS) -o $@ $(LIBS) -Wl,-rpath,. -L. -lcore -lui
+qpra: $(MAIN_SRCS_OBJ) $(CORE_SRCS_OBJ) $(UI_SRCS_OBJ)
+	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
 
-libcore.so: $(CORE_SRCS_ALL)
-	$(CC) $(CFLAGS) -fPIC $(CORE_SRCS) -shared -o $@
-
-libui.so: $(UI_SRCS_ALL)
-	$(CC) $(CFLAGS) -fPIC $(UI_SRCS) -shared -o $@
+%.o: %.c
+	$(CC) $(CFLAGS) $< -c -o $@ $(LIBS)
 
 test.kpr: asm/test.s
 	./as.py $<
 
 clean:
-	rm -f libcore.so libui.so qpra test.kpr
+	rm -f qpra test.kpr
+	find . -name "*.o" -type f -delete

@@ -124,9 +124,20 @@ struct core_vpu {
     uint8_t *rgba_fb;
 
     /* Scanline temporaries (read in for each scanline by the VPU). */
-    uint8_t sl__l1data[32 * 4];
-    uint8_t sl__l2data[32 * 4];
-    uint8_t sl__sdata[64 * 4];
+    uint8_t sl__l1data[2][32 * 4];
+    uint8_t sl__l2data[2][32 * 4];
+    uint8_t sl__sdata[2][64 * 4];
+    /* 
+     * Use two temporary arrays, and use one for reading current scanline,
+     * and the other to write the next one.
+     * Would be implemented using a wide shift register I guess.
+     */
+    uint8_t *sl__l1data_r;
+    uint8_t *sl__l1data_w;
+    uint8_t *sl__l2data_r;
+    uint8_t *sl__l2data_w;
+    uint8_t *sl__sdata_r;
+    uint8_t *sl__sdata_w;
     struct rgba sl__l1pal[16];
     struct rgba sl__l2pal[16];
     struct rgba sl__spal[16];

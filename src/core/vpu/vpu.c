@@ -126,6 +126,16 @@ int core_vpu_init(struct core_vpu **pvpu, struct core_cpu *cpu)
     vpu->tile_s_bank = vpu->mem + 0xb90;
 
     vpu->rgba_fb = ui_get_fb();
+
+    vpu->sl__l1data_r = vpu->sl__l1data[0];
+    vpu->sl__l2data_r = vpu->sl__l2data[0];
+    vpu->sl__sdata_r = vpu->sl__sdata[0];
+
+    vpu->sl__l1data_w = vpu->sl__l1data[1];
+    vpu->sl__l2data_w = vpu->sl__l2data[1];
+    vpu->sl__sdata_w = vpu->sl__sdata[1];
+
+    return 1;
 }
 
 
@@ -361,11 +371,12 @@ void core_vpu_write_fb(struct core_vpu *vpu)
  *
  * Tile data for the layers' tiles and sprites on the current scanline
  * are loaded into buffers for drawing, along with the current palettes.
- * 
+ *
  * The VPU then renders them following their depth and mirroring/doubling.
  */
 void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
 {
+    uint8_t *temp;
     static int scanline = 0;
     int c = total_cycles % VPU_XRES_CYCLES;
 
@@ -378,7 +389,7 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
     /* Scanlines 0-11 and 240 - 261 are V-BLANK lines. We do nothing there.
      * Otherwise, we are in pre-render or render lines. */
     else if(scanline >= 16 && scanline < 240) {
-       
+
         core_vpu__fetch_data(vpu, scanline, c);
 
         /* Cycles 0-24: H-SYNC. */
@@ -394,50 +405,32 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
             l1 = core_vpu__get_l1px(vpu, scanline, c);
             l1t = core_vpu__get_l1t(vpu, scanline, c);
             l2 = core_vpu__get_l2px(vpu, scanline, c);
-            for(i = 0; i < VPU_NUM_SPRITES; ++i) {
+            /*for(i = 0; i < VPU_NUM_SPRITES; ++i) {
                 s[i] = core_vpu__get_spx(vpu, scanline, c, i);
                 st[i] = core_vpu__get_st(vpu, scanline, c, i);
-            }
+            }*/
 
-            l1t = 0;
+            l1t = 1;
             /* Next, draw each pixel on top of each other if not transparent. */
-            out.r = l1t ? l2.r : l1.r;
-            out.g = l1t ? l2.g : l1.g;
-            out.b = l1t ? l2.b : l1.b;
-            for(i = 0; i < VPU_NUM_SPRITES; ++i) {
-                break;
+            out = l1;
+            if(l1t)
+                out = l2;
+            /*for(i = 0; i < VPU_NUM_SPRITES; ++i) {
                 if(!st[i]) {
                     out.r = s[i].r;
                     out.g = s[i].g;
                     out.b = s[i].b;
                 }
-            }
-            
+            }*/
+
             /* Finally, output the pixel to the framebuffer. */
             core_vpu__write_px(vpu, scanline, c, out);
-
-            /*if(scanline == 16 && c == 65) {
-               LOGE("[vpu] tile 0 data: %02x %02x...",
-                       vpu->tile_bank[0], vpu->tile_bank[1]);
-               LOGE("pixel: l1: %d %d %d, l2: %d %d %d",
-                       l1.r, l1.g, l1.b, l2.r, l2.g, l2.b);
-               LOGE("l1data: %02x %02x %02x %02x...",
-                       vpu->sl__l1data[0], vpu->sl__l1data[1],
-                       vpu->sl__l1data[2], vpu->sl__l1data[3]);
-               LOGE("l2data: %02x %02x %02x %02x...",
-                       vpu->sl__l2data[0], vpu->sl__l2data[1],
-                       vpu->sl__l2data[2], vpu->sl__l2data[3]);
-               LOGE("trans: %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",
-                       st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7],
-                       st[8], st[9], st[10], st[11], st[12], st[13], st[14], st[15]);
-               LOGE("-> pixel: %d %d %d\n", out.r, out.g, out.b);
-            }*/
         }
 
     } else if(scanline == 240 && c == 0) {
         core_vpu_begin_vblank(vpu);
     }
-    
+
     /* The last cycle of the scanline is a good time to increment
      * the scanline counter, and wrap it if necessary! */
     if(c == 340) {
@@ -447,6 +440,17 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
         if(scanline == 0) {
             LOGV("core.vpu: frame end");
         }
+
+        /* Swap the scanline temps. */
+        temp = vpu->sl__l1data_r;
+        vpu->sl__l1data_r = vpu->sl__l1data_w;
+        vpu->sl__l1data_w = temp;
+        temp = vpu->sl__l2data_r;
+        vpu->sl__l2data_r = vpu->sl__l2data_w;
+        vpu->sl__l2data_w = temp;
+        temp = vpu->sl__sdata_r;
+        vpu->sl__sdata_r = vpu->sl__sdata_w;
+        vpu->sl__sdata_w = temp;
     }
 }
 
@@ -455,17 +459,18 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
 static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
 {
     unsigned int a = c - 25;
-    unsigned int y = scanline - 16;
+    /* We are writing to the next scanline, not the current one, so add 1. */
+    unsigned int y = scanline - (16 - 1);
 
     /* The VPU is idle during the vertical blanking interval. */
-    if(scanline < 16 || scanline >= 240)
+    if(scanline < (16 - 1) || scanline >= (240 - 1))
         return;
 
     /* The VPU is also idle during every scanline during its horizontal sync
      * period. */
     if(c < 25)
         return;
-    
+
     /* For "regular" scanlines, the following reads are performed:
      * - layer 1 tile data (4*32 = 128 bytes; 64 reads)
      * - layer 2 tile data (4*32 = 128 bytes; 64 reads)
@@ -474,8 +479,8 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
      */
     if(a < 64) {
         /* At cycle 0, there is no previous read request to read back. */
-        if(a > 0) 
-            *(uint16_t *)&vpu->sl__l1data[(a - 1)*2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+        if(a > 0)
+            *(uint16_t *)&vpu->sl__l1data_w[(a - 1)*2] = core_mmu_rw_fetch_vpu(vpu->mmu);
         /* Fetch the tile data for tile[y][x], where:
          * - y = (scanline - 12) / 8 (tiles are 8 scanlines tall)
          * - x = (c - 25) / (8/2) (tiles are 4 BYTES wide) */
@@ -485,34 +490,30 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
     } else if(a < 128) {
         /* At cycle 64, read back last read request for layer 1. */
         if(a == 64)
-            *(uint16_t *)&vpu->sl__l1data[63 * 2] = 
-core_mmu_rw_fetch_vpu(vpu->mmu);
+            *(uint16_t *)&vpu->sl__l1data_w[63 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
         else
-            *(uint16_t *)&vpu->sl__l2data[(a - 1 - 64)*2] = 
-core_mmu_rw_fetch_vpu(vpu->mmu);
+            *(uint16_t *)&vpu->sl__l2data_w[(a - 1 - 64)*2] = core_mmu_rw_fetch_vpu(vpu->mmu);
         /* Fetch the tile data for tile[y][x], where:
          * - y = (scanline - 12) / 8 (tiles are 8 scanlines tall)
          * - x = (c - 25) / (8/2) (tiles are 4 BYTES wide) */
         core_mmu_rw_send_vpu(vpu->mmu,
                 (VPU_A_TILE_BANK + (a % 2)*2 + (y % 8)*4 +
-                 (*vpu->layer2_tm)[(y >> 3)*VPU_TILE_XRES_FULL + ((a - 64) >> 
-2)]));
+                 (*vpu->layer2_tm)[(y >> 3)*VPU_TILE_XRES_FULL + ((a - 64) >> 2)]));
     } else if(a < 256) {
         int i = y / 4;
         /* At cycle 128, read back last read request for layer 2. */
         if(a == 128)
-            *(uint16_t *)&vpu->sl__l2data[127 * 2] = 
-core_mmu_rw_fetch_vpu(vpu->mmu);
+            *(uint16_t *)&vpu->sl__l2data_w[63 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
         else
-            *(uint16_t *)&vpu->sl__sdata[(a - 1 - 128)*2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+            *(uint16_t *)&vpu->sl__sdata_w[(a - 1 - 128)*2] = core_mmu_rw_fetch_vpu(vpu->mmu);
         /* Fetch the tile data for sprite i, where:
-         * - i = (scanline - 12) / (8/2) */ 
+         * - i = (scanline - 12) / (8/2) */
         core_mmu_rw_send_vpu(vpu->mmu,
                 (VPU_A_TILE_BANK + (a % 2)*2 + (y % 8)*4 +
                  (*vpu->spr_ctl)[i*4 + ((a - 128) >> 2) + 3]));
     } else if(a == 256) {
         /* Fetch the last word of sprite data. */
-        *(uint16_t *)&vpu->sl__sdata[(a - 1 - 128)*2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+        *(uint16_t *)&vpu->sl__sdata_w[63 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
     }
 }
 
@@ -522,12 +523,8 @@ static struct rgba core_vpu__get_l2px(struct core_vpu *vpu, int scanline, int c)
 {
     int x = (c - 65) & 255;
     int tx = x / 2;
-    uint8_t e = vpu->sl__l2data[tx];
+    uint8_t e = vpu->sl__l2data_r[tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
-    //LOGE("x %d y %d: e = 0x%02x -> p = %02x %02x %02x", x, scanline-16, e,
-    //        pal_fixed[(*vpu->pals)[e]].r,
-    //        pal_fixed[(*vpu->pals)[e]].g,
-    //        pal_fixed[(*vpu->pals)[e]].b);
 
     return pal_fixed[(*vpu->pals)[e]];
     //return vpu->sl__l2pal[e];
@@ -539,7 +536,7 @@ static struct rgba core_vpu__get_l1px(struct core_vpu *vpu, int scanline, int c)
 {
     int x = (c - 65) & 255;
     int tx = x / 2;
-    uint8_t e = vpu->sl__l1data[tx];
+    uint8_t e = vpu->sl__l1data_r[tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
     return pal_fixed[(*vpu->pals)[e]];
@@ -553,10 +550,10 @@ static struct rgba core_vpu__get_spx(struct core_vpu *vpu, int scanline, int c,
 {
     struct rgba dummy = { 0 };
     int x = (c - 65) & 255;
-    int tx = (x - *vpu->grp_pos[2*i]) / 2;
+    int tx = (x - (*vpu->grp_pos)[2*i]) / 2;
     if(tx < 0)
         return dummy;
-    uint8_t e = vpu->sl__sdata[i*4 + tx];
+    uint8_t e = vpu->sl__sdata_r[i*4 + tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
     return pal_fixed[(*vpu->pals)[e]];
@@ -571,7 +568,7 @@ static int core_vpu__get_l1t(struct core_vpu *vpu, int scanline, int c)
     int x = (c - 65) & 255;
     int tx = x / 2;
 
-    return !!vpu->sl__l1data[tx];
+    return !!vpu->sl__l1data_r[tx];
 }
 
 
@@ -580,11 +577,11 @@ static int core_vpu__get_l1t(struct core_vpu *vpu, int scanline, int c)
 static int core_vpu__get_st(struct core_vpu *vpu, int scanline, int c, int i)
 {
     int x = (c - 65) & 255;
-    int tx = (x - *vpu->grp_pos[2*i]) / 2;
+    int tx = (x - (*vpu->grp_pos)[2*i]) / 2;
     if(tx < 0)
         return 1;
-    
-    return !!vpu->sl__sdata[i*4 + tx];
+
+    return !!vpu->sl__sdata_r[i*4 + tx];
 }
 
 
