@@ -405,23 +405,40 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
             l1 = core_vpu__get_l1px(vpu, scanline, c);
             l1t = core_vpu__get_l1t(vpu, scanline, c);
             l2 = core_vpu__get_l2px(vpu, scanline, c);
-            /*for(i = 0; i < VPU_NUM_SPRITES; ++i) {
-                s[i] = core_vpu__get_spx(vpu, scanline, c, i);
-                st[i] = core_vpu__get_st(vpu, scanline, c, i);
-            }*/
+            for(i = 0; i < VPU_NUM_SPRITES; ++i) {
+                int enabled = !!((*vpu->spr_ctl)[i*4] & 0xf0);
+                int startx = ((*vpu->grp_pos)[i*2] +
+                              (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8);
+                int starty = ((*vpu->grp_pos)[i*2 + 1] +
+                              (((*vpu->spr_ctl)[i*4 + 2] & 0x0f) - 8)*8);
+                /*if(i == 0 && scanline == 16) {
+                    LOGE("sl % 3d (y = % 3d) c % 3d (x = % 3d): E=%d sx=% 3d sy=% 3d; used = %d",
+                         scanline, scanline-16, c, c-65, enabled, startx, starty,
+                         (enabled && ((c-65) >= startx) && ((c-65) < (startx + 8)) &&
+                                ((scanline-16) >= starty) && ((scanline-16) < (starty + 8)))
+                        );
+                }*/
+                if(enabled && ((c-65) >= startx) && ((c-65) < (startx + 8)) &&
+                        ((scanline-16) >= starty) && ((scanline-16) < (starty + 8))) {
+                    s[i] = core_vpu__get_spx(vpu, scanline, c, i);
+                    st[i] = core_vpu__get_st(vpu, scanline, c, i);
+                } else {
+                    st[i] = 1;
+                }
+            }
 
-            l1t = 1;
+            //1t = 1;
             /* Next, draw each pixel on top of each other if not transparent. */
             out = l1;
             if(l1t)
                 out = l2;
-            /*for(i = 0; i < VPU_NUM_SPRITES; ++i) {
-                if(!st[i]) {
+            for(i = 0; i < VPU_NUM_SPRITES; ++i) {
+                if(((*vpu->spr_ctl)[i*4] & 0xf0) && !st[i]) {
                     out.r = s[i].r;
                     out.g = s[i].g;
                     out.b = s[i].b;
                 }
-            }*/
+            }
 
             /* Finally, output the pixel to the framebuffer. */
             core_vpu__write_px(vpu, scanline, c, out);
@@ -510,10 +527,10 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
          * - i = (scanline - 12) / (8/2) */
         core_mmu_rw_send_vpu(vpu->mmu,
                 (VPU_A_TILE_BANK + (a % 2)*2 + (y % 8)*4 +
-                 (*vpu->spr_ctl)[i*4 + ((a - 128) >> 2) + 3]));
+                 (*vpu->spr_ctl)[((a - 128) >> 2) + 3] * VPU_TILE_SZ));
     } else if(a == 256) {
         /* Fetch the last word of sprite data. */
-        *(uint16_t *)&vpu->sl__sdata_w[63 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+        *(uint16_t *)&vpu->sl__sdata_w[127 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
     }
 }
 
@@ -567,8 +584,10 @@ static int core_vpu__get_l1t(struct core_vpu *vpu, int scanline, int c)
 {
     int x = (c - 65) & 255;
     int tx = x / 2;
+    uint8_t e = vpu->sl__l1data_r[tx];
+    e = (c & 1) ? (e >> 4) : (e & 0xf);
 
-    return !!vpu->sl__l1data_r[tx];
+    return !e;
 }
 
 
@@ -580,8 +599,10 @@ static int core_vpu__get_st(struct core_vpu *vpu, int scanline, int c, int i)
     int tx = (x - (*vpu->grp_pos)[2*i]) / 2;
     if(tx < 0)
         return 1;
+    uint8_t e = vpu->sl__sdata_r[i*4 + tx];
+    e = (c & 1) ? (e >> 4) : (e & 0xf);
 
-    return !!vpu->sl__sdata_r[i*4 + tx];
+    return !e;
 }
 
 

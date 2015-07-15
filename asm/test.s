@@ -9,6 +9,8 @@ loop:       jp loop             ; loop until the video IRQ
 
 v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             mv.b [$ea00], a     ; update sprite 0 reg.
+            mv a, $88           ; set x and y sprite group offsets to 0
+            mv.b [$ea02], a     ; update sprite 0 reg.
             mv a, $01           ; tile index 1
             mv.b [$ea03], a     ; update sprite 0 reg.
             mv a, 0             ; use palette 0
@@ -30,21 +32,21 @@ v_handler1: mv [$eb00], c       ; update group 0 pos.
 
 .bank tile_swap 0
 
-.db $10,$01,$00,$10,
+.db $10,$00,$00,$01,
+.db $01,$00,$00,$10,
 .db $00,$10,$01,$00,
-.db $01,$00,$10,$01,
-.db $10,$01,$00,$10,
+.db $00,$01,$10,$00,
+.db $00,$01,$10,$00,
 .db $00,$10,$01,$00,
-.db $01,$00,$10,$01,
-.db $10,$01,$00,$10,
-.db $00,$00,$00,$00,
+.db $01,$00,$00,$10,
+.db $10,$00,$00,$01,
 
 .db $01,$11,$11,$10,
 .db $11,$11,$11,$11,
-.db $11,$01,$10,$11,
-.db $11,$01,$10,$11,
 .db $11,$11,$11,$11,
-.db $10,$11,$11,$01,
-.db $11,$00,$00,$11,
+.db $11,$11,$11,$11,
+.db $11,$11,$11,$11,
+.db $11,$11,$11,$11,
+.db $11,$11,$11,$11,
 .db $01,$11,$11,$10,
 

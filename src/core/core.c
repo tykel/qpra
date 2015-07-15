@@ -99,17 +99,22 @@ void *core_entry(void *data)
         if(cycles >= CORE_CYCLES_F) {
             struct timespec ts, ts_sleep;
             static unsigned int frame = 0;
-            
+            unsigned long int ns = 0;
+
             clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+            ns = (ts.tv_sec - tslf.tv_sec) * 1000000000;
+            ns += (ts.tv_nsec - tslf.tv_nsec);
+
             if(frame++ % 30 == 0)
-                LOGD("frame: % 3d.%04dms",
-                     (ts.tv_nsec - tslf.tv_nsec)/1000000,
-                     ((ts.tv_nsec - tslf.tv_nsec)%1000000)/1000);
-            
-            ts_sleep.tv_sec = 0;
-            ts_sleep.tv_nsec = 16666666;
-            nanosleep(&ts_sleep, NULL);
-            
+                LOGD("frame: % 3d.%03dms", ns/1000000, (ns%1000000)/1000);
+
+            if(ns < 16666666) {
+                ts_sleep.tv_sec = 0;
+                ts_sleep.tv_nsec = 16666666 - ns;
+                LOGV("sleeping %d ns", ts_sleep.tv_nsec);
+                nanosleep(&ts_sleep, NULL);
+            }
+
             clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
             tslf = ts;
             cycles = 0;
