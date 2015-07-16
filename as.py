@@ -327,6 +327,9 @@ def main():
             op1 = 0
             op2 = 0
             am = getAddrMode(i.nops, i.op1, i.op2, defs)
+            if am in [0,1,6,7,8,9,10,11,12]:
+                if i.op1 in rr or (len(i.op1) > 2 and chr(i.op1,1) in rr):
+                    op1 = regs[i.op1]
             if am in [2,3,4,5,13,14] :
                 if i.op1 in defs:
                     op1 = defs[i.op1]
