@@ -388,60 +388,62 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
 
     /* Scanlines 0-11 and 240 - 261 are V-BLANK lines. We do nothing there.
      * Otherwise, we are in pre-render or render lines. */
-    else if(scanline >= 16 && scanline < 240) {
+    else if(scanline >= 15 && scanline < 240) {
 
         core_vpu__fetch_data(vpu, scanline, c);
 
-        /* Cycles 0-24: H-SYNC. */
-        /* Cycles 25-64: Back porch and colorburst. */
-
-        /* Cycles 65-320: Pixel data! */
-        if(c >= 65 && c < 321) {
-            struct rgba out, l1, l2, s[VPU_NUM_SPRITES];
-            int i, l1t, st[VPU_NUM_SPRITES];
-
-            /* First get RGB and transparency data for each layer and sprite's
-             * pixel. */
-            l1 = core_vpu__get_l1px(vpu, scanline, c);
-            l1t = core_vpu__get_l1t(vpu, scanline, c);
-            l2 = core_vpu__get_l2px(vpu, scanline, c);
-            for(i = 0; i < VPU_NUM_SPRITES; ++i) {
-                int enabled = !!((*vpu->spr_ctl)[i*4] & 0xf0);
-                int startx = ((*vpu->grp_pos)[i*2] +
-                              (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8);
-                int starty = ((*vpu->grp_pos)[i*2 + 1] +
-                              (((*vpu->spr_ctl)[i*4 + 2] & 0x0f) - 8)*8);
-                /*if(i == 0 && scanline == 16) {
-                    LOGE("sl % 3d (y = % 3d) c % 3d (x = % 3d): E=%d sx=% 3d sy=% 3d; used = %d",
-                         scanline, scanline-16, c, c-65, enabled, startx, starty,
-                         (enabled && ((c-65) >= startx) && ((c-65) < (startx + 8)) &&
-                                ((scanline-16) >= starty) && ((scanline-16) < (starty + 8)))
-                        );
-                }*/
-                if(enabled && ((c-65) >= startx) && ((c-65) < (startx + 8)) &&
-                        ((scanline-16) >= starty) && ((scanline-16) < (starty + 8))) {
-                    s[i] = core_vpu__get_spx(vpu, scanline, c, i);
-                    st[i] = core_vpu__get_st(vpu, scanline, c, i);
-                } else {
-                    st[i] = 1;
+        if (scanline >= 16) {
+            /* Cycles 0-24: H-SYNC. */
+            /* Cycles 25-64: Back porch and colorburst. */
+    
+            /* Cycles 65-320: Pixel data! */
+            if(c >= 65 && c < 321) {
+                struct rgba out, l1, l2, s[VPU_NUM_SPRITES];
+                int i, l1t, st[VPU_NUM_SPRITES];
+    
+                /* First get RGB and transparency data for each layer and sprite's
+                 * pixel. */
+                l1 = core_vpu__get_l1px(vpu, scanline, c);
+                l1t = core_vpu__get_l1t(vpu, scanline, c);
+                l2 = core_vpu__get_l2px(vpu, scanline, c);
+                for(i = 0; i < VPU_NUM_SPRITES; ++i) {
+                    int enabled = !!((*vpu->spr_ctl)[i*4] & 0xf0);
+                    int startx = ((*vpu->grp_pos)[i*2] +
+                                  (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8);
+                    int starty = ((*vpu->grp_pos)[i*2 + 1] +
+                                  (((*vpu->spr_ctl)[i*4 + 2] & 0x0f) - 8)*8);
+                    /*if(i == 0 && scanline == 16) {
+                        LOGE("sl % 3d (y = % 3d) c % 3d (x = % 3d): E=%d sx=% 3d sy=% 3d; used = %d",
+                             scanline, scanline-16, c, c-65, enabled, startx, starty,
+                             (enabled && ((c-65) >= startx) && ((c-65) < (startx + 8)) &&
+                                    ((scanline-16) >= starty) && ((scanline-16) < (starty + 8)))
+                            );
+                    }*/
+                    if(enabled && ((c-65) >= startx) && ((c-65) < (startx + 8)) &&
+                            ((scanline-16) >= starty) && ((scanline-16) < (starty + 8))) {
+                        s[i] = core_vpu__get_spx(vpu, scanline, c, i);
+                        st[i] = core_vpu__get_st(vpu, scanline, c, i);
+                    } else {
+                        st[i] = 1;
+                    }
                 }
-            }
-
-            //1t = 1;
-            /* Next, draw each pixel on top of each other if not transparent. */
-            out = l1;
-            if(l1t)
-                out = l2;
-            for(i = 0; i < VPU_NUM_SPRITES; ++i) {
-                if(((*vpu->spr_ctl)[i*4] & 0xf0) && !st[i]) {
-                    out.r = s[i].r;
-                    out.g = s[i].g;
-                    out.b = s[i].b;
+    
+                //1t = 1;
+                /* Next, draw each pixel on top of each other if not transparent. */
+                out = l1;
+                if(l1t)
+                    out = l2;
+                for(i = 0; i < VPU_NUM_SPRITES; ++i) {
+                    if(((*vpu->spr_ctl)[i*4] & 0xf0) && !st[i]) {
+                        out.r = s[i].r;
+                        out.g = s[i].g;
+                        out.b = s[i].b;
+                    }
                 }
+    
+                /* Finally, output the pixel to the framebuffer. */
+                core_vpu__write_px(vpu, scanline, c, out);
             }
-
-            /* Finally, output the pixel to the framebuffer. */
-            core_vpu__write_px(vpu, scanline, c, out);
         }
 
     } else if(scanline == 240 && c == 0) {
