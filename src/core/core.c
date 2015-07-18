@@ -75,11 +75,11 @@ void *core_entry(void *data)
         do {
             /* Apply any pending read/write requests on the bus. */
             core_mmu_update(core->cpu->mmu);
+            /* Execute a cycle in the VPU. */
+            core_vpu_cycle(core->vpu, core->cpu->total_cycles);
             /* Execute an instruction cycle in the CPU. */
             core_cpu_i_cycle(core->cpu);
             LOGV("core.cpu: ... cycle %d", core->cpu->i_cycles);
-            /* Execute a cycle in the VPU. */
-            core_vpu_cycle(core->vpu, core->cpu->total_cycles);
 
             //core->cpu->i_middle = 0;
             cycles += 1;

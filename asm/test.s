@@ -19,15 +19,15 @@ v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             mv.b [$e900], a     ; update palette 0, entry 0
             mv a, $dd           ; color 'white' in global palette
             mv.b [$e901], a     ; update palette 0, entry 1
-            mv c, $0101         ; x = 1, y = 1
+            mv c, $0001         ; x = 1, y = 1
             mv a, v_handler1    ; load the "real" video IRQ handler address
             mv [$fffa], a       ; store it in the interrupt vector
             rti
 
 v_handler1: mv [$eb00], c       ; update group 0 pos.
             inc c               ; increment group x position
-            lsl c, 8
-            inc c
+            ;lsl c, 8
+            ;inc c
             rti
 
 .bank tile_swap 0
@@ -41,12 +41,12 @@ v_handler1: mv [$eb00], c       ; update group 0 pos.
 .db $01,$00,$00,$10,
 .db $10,$00,$00,$01,
 
-.db $01,$11,$11,$10,
 .db $11,$11,$11,$11,
 .db $11,$11,$11,$11,
 .db $11,$11,$11,$11,
 .db $11,$11,$11,$11,
 .db $11,$11,$11,$11,
 .db $11,$11,$11,$11,
-.db $01,$11,$11,$10,
+.db $11,$11,$11,$11,
+.db $11,$11,$11,$11,
 

@@ -572,7 +572,8 @@ static struct rgba core_vpu__get_spx(struct core_vpu *vpu, int scanline, int c,
     int tx = (x - (*vpu->grp_pos)[2*i]) / 2;
     if(tx < 0)
         return dummy;
-    uint8_t e = vpu->sl__sdata_r[i*4 + tx];
+    int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
+    uint8_t e = vpu->sl__sdata_r[i*4 + tx/(h2+1)];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
     return pal_fixed[(*vpu->pals)[e]];
