@@ -330,6 +330,9 @@ def main():
             if am in [0,1,6,7,8,9,10,11,12]:
                 if i.op1 in rr or (len(i.op1) > 2 and chr(i.op1,1) in rr):
                     op1 = regs[i.op1]
+            if am in [6,8,13,14]:
+                if i.op2 in rr or (len(i.op2) > 2 and chr(i.op2,1) in rr):
+                    op2 = regs[i.op2]
             if am in [2,3,4,5,13,14] :
                 if i.op1 in defs:
                     op1 = defs[i.op1]
