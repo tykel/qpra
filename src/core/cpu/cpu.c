@@ -268,7 +268,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
                     INSTR_D8(cpu->i) : INSTR_D16(cpu->i);
                 if(instr_is_2op(cpu->i))
                     p.op2 = cpu->r[INSTR_RY(cpu->i)];
-            } else if(instr_is_op2data(cpu->i)) {
+            } else {
                 p.op1 = cpu->r[INSTR_RX(cpu->i)];
                 p.op2 = (INSTR_AM(cpu->i) == AM_DR_DB) ?
                     INSTR_D8(cpu->i) : INSTR_D16(cpu->i);
@@ -278,14 +278,14 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             if(instr_is_srcptr(cpu->i)) {
                 if(instr_is_1op(cpu->i))
                     if(INSTR_OPSZ(cpu->i) == OP_16)
-                        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)]);
+                        core_mmu_rw_send_cpu(cpu->mmu, p.op1);//cpu->r[INSTR_RX(cpu->i)]);
                     else
-                        core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)]);
+                        core_mmu_rb_send_cpu(cpu->mmu, p.op1);//cpu->r[INSTR_RX(cpu->i)]);
                 else
                     if(INSTR_OPSZ(cpu->i) == OP_16)
-                        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
+                        core_mmu_rw_send_cpu(cpu->mmu, p.op2);//cpu->r[INSTR_RY(cpu->i)]);
                     else
-                        core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
+                        core_mmu_rb_send_cpu(cpu->mmu, p.op2);//cpu->r[INSTR_RY(cpu->i)]);
             /* Operate directly on data; nothing further to fetch. */
             } else {
                 i(cpu, &p);
