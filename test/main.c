@@ -6,7 +6,7 @@
 
 int main(int argc, char *argv)
 {
-    int i;
+    int i, p = -1;
     struct cpu_state s;
 
     cpu_init(&s);
@@ -22,13 +22,13 @@ int main(int argc, char *argv)
     };
     memcpy(s.m, program, sizeof(program));
 
-    for(i = 0; i < 60; i++) {
-        printf("\nAfter %d cycle%s: p = %04x; a = %04x, b = %04x\n",
-               i, i!=1?"s":" ", s.p, s.a, s.b);
+    for(i = 0; i < 60 && s.p_old != s.p; i++) {
+        //printf("\nAfter %d cycle%s: p = %04x; a = %04x, b = %04x\n",
+        //       i, i!=1?"s":" ", s.p, s.a, s.b);
         cpu_cycle(&s);
     }
-    printf("\nAfter %d cycles: p = %04x; a = %04x\n, b = %04x",
-           i, s.p, s.a, s.b);
+    //printf("\nAfter %d cycles: p = %04x; a = %04x\n, b = %04x",
+    //       i, s.p, s.a, s.b);
 
     cpu_destroy(&s);
 

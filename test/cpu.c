@@ -214,6 +214,68 @@ static inline int cycles(struct cpu_state *s)
     return -1;
 }
 
+static void cpu_disasm(struct cpu_state *s)
+{
+    int i, o, m;
+    char *ops[] = { 
+        "nop","add","sub","mul","div","lsl","lsr","asr",
+        "or","xor","and","not","mvr","jpx","jp","mvm"
+    };
+    char *regs[] = { "a", "b", "c", "x", "y", "p", "s", "f" };
+
+    o = op(s);
+    m = mode(s);
+    printf("\n%04x: %02x %02x ", s->p_old, s->ib0, s->ib1);
+    if(m == MODE_P && s->ib0 & 1 ||
+       m == MODE_RIR || m == MODE_IR || m == MODE_PR || m == MODE_RP)
+        printf("%02x ", s->ib2);
+    else printf("   ");
+    if((m == MODE_RIR || m == MODE_IR || m == MODE_PR || m == MODE_RP) &&
+       s->ib1 & 1)
+        printf("%02x ", s->ib3);
+    else printf("   ");
+    printf("%s ", ops[o]);
+
+    switch(m) {
+        case MODE_RRR:
+            printf("%s, %s, %s", regs[src(s)], regs[opd(s)], regs[dst(s)]);
+            break;
+        case MODE_RIR:
+            printf("%s, %d, %s", regs[src(s)], imm(s), regs[dst(s)]);
+            break;
+        case MODE_RR:
+            printf("%s, %s", regs[src(s)], regs[dst(s)]);
+            break;
+        case MODE_IR:
+            printf("%d, %s", imm(s), regs[dst(s)]);
+            break;
+        case MODE_p:
+            printf("[%s]", regs[src(s)]);
+            break;
+        case MODE_P: {
+            uint16_t i = imm(s);
+            int8_t   d = *(int8_t *)&i;
+            uint16_t a = (s->ib0 & 1) ? i : (s->p + *(int8_t *)&i);
+            printf("[%04x] (+ %d)", a, d);
+            break;
+        }
+        case MODE_PR:
+            printf("[%d], %s", imm(s), regs[dst(s)]);
+            break;
+        case MODE_pR:
+            printf("[%s], %s", regs[src(s)], regs[dst(s)]);
+            break;
+        case MODE_RP:
+            printf("%s, [%d]", regs[src(s)], imm(s));
+            break;
+        case MODE_Rp:
+            printf("%s, [%s]", regs[src(s)], regs[dst(s)]);
+            break;
+    }
+
+    printf("\n");
+}
+
 static inline uint16_t readpc(struct cpu_state *s) {
     uint16_t pc = *(uint16_t *)&s->m[s->p];
     s->p += 2;
@@ -223,6 +285,7 @@ static inline uint16_t readpc(struct cpu_state *s) {
 // Fetch/Decode cycle
 bool cpu_cycle_fd(struct cpu_state *s)
 {
+    s->p_old = s->p;
     *(uint16_t *)&s->ib0 = readpc(s);
     if(mode(s) == MODE_P && s->ib0 & 1) s->p -= 1;
     if(mode(s) == MODE_pR) s->latch_a = s->r[src(s)];
@@ -266,6 +329,9 @@ bool cpu_cycle_ex(struct cpu_state *s)
     int o = op(s);
     int m = mode(s);
     struct opdata x;
+
+    // Dissassemble instruction fully
+    cpu_disasm(s);
 
     // NOP
     if(!o) {

@@ -60,6 +60,8 @@ struct cpu_state {
     uint8_t m[64 * 1024];
 
     opptr_t op[16];
+    
+    uint16_t p_old;
 };
 
 bool cpu_init(struct cpu_state *s);
