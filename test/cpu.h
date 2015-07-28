@@ -55,6 +55,7 @@ struct cpu_state {
     int istages;
 
     int cycle;
+    int icycle;
     int icycles;
 
     uint8_t m[64 * 1024];

@@ -413,7 +413,7 @@ bool cpu_cycle_st(struct cpu_state *s)
 // Execute one cycle in the processor
 bool cpu_cycle(struct cpu_state *s)
 {
-    printf("stage: %s\n", stagestr(s->stage));
+    printf("% 6d: stage: %s\n", s->cycle, stagestr(s->stage));
     switch(s->stage) {
         case STAGE_FD:
             s->ib0 = s->ib1 = s->ib2 = s->ib3 = 0;
@@ -421,9 +421,7 @@ bool cpu_cycle(struct cpu_state *s)
             // Determine all the stages of this instruction
             s->istages = stages(s);
             s->icycles = cycles(s);
-            s->cycle = 1;
-            printf("--- found op   %s\n", opstr(op(s)));
-            printf("--- found mode (%03x) %s\n", mode(s), modestr(mode(s)));
+            s->icycle = 1;
             break;
         case STAGE_FE:
             cpu_cycle_fe(s);
@@ -446,6 +444,8 @@ bool cpu_cycle(struct cpu_state *s)
         s->stage = STAGE_FD;
         printf("----------------------------------------\n");
     }
+    s->cycle += 1;
+    s->icycle += 1;
 
     return true;
 }
