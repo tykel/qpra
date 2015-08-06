@@ -2,6 +2,31 @@
 #include <stdint.h>
 
 #include "vpu.h"
+#include "cpu.h"
+
+// FIXME: Temp until this code is integrated back into the emulator
+uint8_t framebuffer[VIS_PIXELS * VIS_SCANLINES * 4];
+
+struct rgba *fb;
+
+
+static inline int coarse_scroll_l1h(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb82] + 32) % 36; }
+static inline int coarse_scroll_l1v(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb84] + 28) % 32; }
+static inline int coarse_scroll_l2h(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb86] + 32) % 36; }
+static inline int coarse_scroll_l2v(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb88] + 28) % 32; }
+
+static inline int fine_scroll_l1h(struct vpu_state *vpu) { return vpu->cpu->m[0xeb83] & 7; }
+static inline int fine_scroll_l1v(struct vpu_state *vpu) { return vpu->cpu->m[0xeb85] & 7; }
+static inline int fine_scroll_l2h(struct vpu_state *vpu) { return vpu->cpu->m[0xeb87] & 7; }
+static inline int fine_scroll_l2v(struct vpu_state *vpu) { return vpu->cpu->m[0xeb89] & 7; }
+
+static inline int scanline_y(int scanline) { return scanline - 16; }
+static inline int cycle_x(int cycle) { return cycle - 25; }
+
+static inline bool in_vblank(int scanline) { return scanline <= 12 || scanline >= 240; }
+static inline bool in_hsync(int cycle) { return cycle <= 25; }
+static inline bool in_bp_cb(int cycle) { return cycle >= 26 && cycle <= 64; }
+
 
 // Perform a clean read of the sprite from memory
 void sprite_get(struct vpu_state *vpu, int i)

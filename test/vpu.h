@@ -2,7 +2,6 @@
 #define __vpu_h__
 
 #include "common.h"
-#include "cpu.h"
 
 #define NUM_SPRITES     64
 #define PALETTE_SIZE    16
@@ -48,25 +47,6 @@ struct vpu_state {
     int scanline;
     struct cpu_state *cpu;
 };
-
-struct rgba *fb;
-
-inline int coarse_scroll_l1h(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb82] + 32) % 36; }
-inline int coarse_scroll_l1v(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb84] + 28) % 32; }
-inline int coarse_scroll_l2h(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb86] + 32) % 36; }
-inline int coarse_scroll_l2v(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb88] + 28) % 32; }
-
-inline int fine_scroll_l1h(struct vpu_state *vpu) { return vpu->cpu->m[0xeb83] & 7; }
-inline int fine_scroll_l1v(struct vpu_state *vpu) { return vpu->cpu->m[0xeb85] & 7; }
-inline int fine_scroll_l2h(struct vpu_state *vpu) { return vpu->cpu->m[0xeb87] & 7; }
-inline int fine_scroll_l2v(struct vpu_state *vpu) { return vpu->cpu->m[0xeb89] & 7; }
-
-inline int scanline_y(int scanline) { return scanline - 16; }
-inline int cycle_x(int cycle) { return cycle - 25; }
-
-inline bool in_vblank(int scanline) { return scanline <= 12 || scanline >= 240; }
-inline bool in_hsync(int cycle) { return cycle <= 25; }
-inline bool in_bp_cb(int cycle) { return cycle >= 26 && cycle <= 64; }
 
 bool vpu_init(struct vpu_state *, struct cpu_state *);
 bool vpu_cycle(struct vpu_state *);
