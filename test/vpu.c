@@ -1,61 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "cpu.h"
-
-#define NUM_SPRITES     64
-#define PALETTE_SIZE    16
-#define TILE_SIZE       (4*8)
-
-#define false 0
-#define true 1
-typedef int bool;
-
-struct vpu_sprite {
-    bool enabled;
-    int z;
-    int hh;
-    int vv;
-    uint8_t group;
-    uint8_t xoffs;
-    uint8_t yoffs;
-    uint8_t tile;
-
-    // Convenience
-    int x_start, x_end;
-    int y_start, y_end;
-};
-
-struct rgba {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t a;
-};
-
-struct vpu_state {
-    struct vpu_sprite sprites[NUM_SPRITES];
-    struct rgba sprite_palette[PALETTE_SIZE];
-    struct rgba tmap1_palette[PALETTE_SIZE];
-    struct rgba tmap2_palette[PALETTE_SIZE];
-
-    struct rgba global_palette[16 * PALETTE_SIZE];
-
-    struct cpu_state *cpu;
-};
-
-inline int coarse_scroll_l1h(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb82] + 32) % 36; }
-inline int coarse_scroll_l1v(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb84] + 28) % 32; }
-inline int coarse_scroll_l2h(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb86] + 32) % 36; }
-inline int coarse_scroll_l2v(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb88] + 28) % 32; }
-
-inline int fine_scroll_l1h(struct vpu_state *vpu) { return vpu->cpu->m[0xeb83] & 7; }
-inline int fine_scroll_l1v(struct vpu_state *vpu) { return vpu->cpu->m[0xeb85] & 7; }
-inline int fine_scroll_l2h(struct vpu_state *vpu) { return vpu->cpu->m[0xeb87] & 7; }
-inline int fine_scroll_l2v(struct vpu_state *vpu) { return vpu->cpu->m[0xeb89] & 7; }
-
-inline int scanline_y(int scanline) { return scanline - 16; }
-inline int cycle_x(int cycle) { return cycle - 25; }
+#include "vpu.h"
 
 // Perform a clean read of the sprite from memory
 void sprite_get(struct vpu_state *vpu, int i)
@@ -94,4 +40,95 @@ struct rgba sprite_px(struct vpu_state *vpu, int i, int x, int y)
     int c = vpu->cpu->m[0xc000 + s->tile*TILE_SIZE + y*4 + (x>>1)];
     c = (x & 1) ? (c & 0xf) : (c >> 4);
     return vpu->sprite_palette[c];
+}
+
+void tmap1_pal_get(struct vpu_state *vpu)
+{
+    int i;
+    uint8_t tp = vpu->cpu->m[0xeb40] & 0x0f;
+    uint8_t *p = &vpu->cpu->m[0xe900 + tp*PALETTE_SIZE];
+
+    for(i = 0; i < PALETTE_SIZE; ++i)
+        vpu->tl1_palette[i] = vpu->global_palette[p[i]];
+}
+
+struct rgba tl1_px(struct vpu_state *vpu, int x, int y)
+{
+    int tx = x >> 3;
+    int ty = y >> 3;
+    int t = vpu->cpu->m[0xe000 + ty*TILES_H_MEM + tx];
+    int c = vpu->cpu->m[0xc000 + t*TILE_SIZE + y*4 + (x>>1)];
+    c = (c & 1) ? (c & 0xf) : (c >> 4);
+    return vpu->tl1_palette[c];
+}
+
+void tl2_pal_get(struct vpu_state *vpu)
+{
+    int i;
+    uint8_t tp = vpu->cpu->m[0xeb40] >> 4;
+    uint8_t *p = &vpu->cpu->m[0xe900 + tp*PALETTE_SIZE];
+
+    for(i = 0; i < PALETTE_SIZE; ++i)
+        vpu->tl2_palette[i] = vpu->global_palette[p[i]];
+}
+
+struct rgba tl2_px(struct vpu_state *vpu, int x, int y)
+{
+    int tx = x >> 3;
+    int ty = y >> 3;
+    int t = vpu->cpu->m[0xe000 + ty*TILES_H_MEM + tx];
+    int c = vpu->cpu->m[0xc000 + t*TILE_SIZE + y*4 + (x>>1)];
+    c = (c & 1) ? (c & 0xf) : (c >> 4);
+    return vpu->tl2_palette[c];
+}
+
+bool vpu_init(struct vpu_state *vpu, struct cpu_state *cpu)
+{
+    fb = (struct rgba *)framebuffer;
+    vpu->cpu = cpu;
+    return true;
+}
+
+bool vpu_cycle(struct vpu_state *vpu)
+{
+    struct rgba tl1, tl2, s[NUM_SPRITES];
+    int i;
+    int x = cycle_x(vpu->cycle);
+    int y = scanline_y(vpu->scanline);
+
+    printf("% 6d (vpu) x = %d, y = %d\n", vpu->cycle, x, y);
+
+    // In VBlank scanlines or the non-visible part of the scanline, do nothing.
+    if(in_vblank(vpu->scanline))
+        goto __vpu_cycle_inc;
+    if(in_hsync(vpu->cycle) || in_bp_cb(vpu->cycle))
+        goto __vpu_cycle_inc;
+
+    // We are in a visible scanline, and in the active part of the scanline.
+    // Get the right pixel and output it.
+    tl1 = tl1_px(vpu, x, y);
+    tl2 = tl2_px(vpu, x, y);
+    for(i = 0; i < NUM_SPRITES; ++i) {
+        s[i] = sprite_px(vpu, i, x, y);
+    }
+    // TODO: Some magic, to determine which pixel layer to display
+    fb[y * VIS_PIXELS + x] = tl2;
+
+__vpu_cycle_inc:
+    // Increment (and wrap if necessary) the cycle and scanline counters.
+    vpu->cycle += 1;
+    if(vpu->cycle > 340) {
+        vpu->cycle = 0;
+        vpu->scanline += 1;
+    }
+    if(vpu->scanline > 261) {
+        vpu->scanline = 0;
+    }
+
+    return true;
+}
+
+bool vpu_destroy(struct vpu_state *vpu)
+{
+    return true;
 }

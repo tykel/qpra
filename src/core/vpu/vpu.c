@@ -413,16 +413,18 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                                   (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8);
                     int starty = ((*vpu->grp_pos)[grp*2 + 1] +
                                   (((*vpu->spr_ctl)[i*4 + 2] & 0x0f) - 8)*8);
+                    int in = 0;
+
                     if(enabled && ((c-65) >= startx) && ((c-65) < (startx + 8)) &&
                             ((scanline-16) >= starty) && ((scanline-16) < (starty + 8))) {
                         s[i] = core_vpu__get_spx(vpu, scanline, c, i);
                         st[i] = core_vpu__get_st(vpu, scanline, c, i);
+                        in = 1;
                     } else {
                         st[i] = 1;
                     }
                 }
     
-                //1t = 1;
                 /* Next, draw each pixel on top of each other if not transparent. */
                 out = l1;
                 if(l1t)

@@ -50,6 +50,12 @@ char *instrnam[NUM_INSTRS] = {
     "xor"  /* 1f */
 };
 
+/* Map of addressing modes to strings, for logging. */
+char *amnam[16] = {
+    "DR", "IR", "DB", "IB", "DW", "IW", "DR_DR", "DR_IR",
+    "IR_DR", "DR_DB", "DR_IB", "DR_DW", "DR_IW", "IB_DR", "IW_DR", "<ILL>"
+};
+
 
 /* Initialize the CPU state. Sets up the opcode jump table. */
 int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
@@ -393,6 +399,255 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
     }
 
     *c += 1;
+}
+
+/*
+ * Version 2 of the re-entrant CPU cycle emulation function.
+ * Focus on modularity and simplicity.
+ */
+void core_cpu_i_cycle_v2(struct core_cpu *cpu)
+{
+    int *c = &cpu->i_cycles;
+
+    core_cpu_hrc_step(cpu);
+
+    /* Handle interrupt if pending. */
+    if(core_cpu_handle_interrupt(cpu))
+        return;
+
+    switch(*c) {
+        case 0:
+            core_cpu__fetch_op(cpu);
+            break;
+        case 1:
+            core_cpu__exec_c1(cpu);
+            break;
+        case 2:
+            core_cpu__exec_c2(cpu);
+            break;
+        case 3:
+            core_cpu__exec_c3(cpu);
+            break;
+        case 4:
+            core_cpu__exec_c4(cpu);
+            break;
+        case 5:
+            core_cpu__exec_c5(cpu);
+            break;
+        default:
+            LOGE("reached invalid cycle %d (%d%s cycle)", *c, "th");
+            return;
+    }
+        if(*c == 0) {
+            cpu->r[R_S] -= 2;
+            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
+            *c += 1;
+        } else if(*c == 1) {
+            cpu->r[R_S] -= 2;
+            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
+            *c += 1;
+        } else if(*c == 2) {
+            switch(cpu->interrupt) {
+                case INT_USER_IRQ:
+                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffe);
+                    break;
+                case INT_TIMER_IRQ:
+                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffc);
+                    break;
+                case INT_VIDEO_IRQ:
+                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffa);
+                    break;
+                case INT_AUDIO_IRQ:
+                    core_mmu_rw_send_cpu(cpu->mmu, 0xfff8);
+                    break;
+            }
+            *c += 1;
+
+        } else if(*c == 3) {
+            cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
+            cpu->interrupt = INT_NONE;
+            *c = 0;
+        }
+        return;
+    }
+}
+
+void core_cpu__fetch_op(struct core_cpu *cpu)
+{
+    struct core_instr_params p;
+
+    cpu->i_middle = 1;
+    memset(&p, 0, sizeof(p));
+
+    core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_P]);
+
+    p.p = cpu->r[R_P];
+    p.s = cpu->r[R_S];
+    p.f = cpu->r[R_F];
+
+    cpu->r[R_P] += 2;
+}
+
+void core_cpu__exec_c1(struct core_cpu *cpu)
+{
+    static void (*o)(struct core_cpu *, struct core_instr_params *);
+    struct core_instr i = cpu->i;
+    struct core_instr_params p;
+    uint16_t v = core_mmu_rw_fetch_cpu(cpu->mmu);
+
+    cpu->i->ib0 = B_LO(v);
+    cpu->i->ib1 = B_HI(v);
+    o = core_cpu_ops[INSTR_OP(i)];
+
+    /* Possible cases:
+     * - void: rollback PC by 1, execute
+     * - reg. only: assign regs to params, execute, assign params to regs
+     * - reg. ptr: send data read request at INSTR_RY 
+     * - has data: send data read request at p.
+     */
+    if(instr_is_void(i)) {
+        cpu->r[R_P] -= 1;
+        switch(INSTR_OP(i)) {
+            case OP_NOP:
+                o(cpu, &p);
+                cpu->i_done = 1;
+                break;
+            case OP_INT:
+                core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
+                cpu->r[R_P] -= 2;
+                cpu->r[R_F] |= 0x10;
+                break;
+            case OP_RTI:
+            case OP_RTS:
+                core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
+                cpu->r[R_S] += 2;
+                break;
+        }
+    } else if(instr_dr_only(i)) {
+        p.op1 = cpu->r[INSTR_RX(i)];
+        if(instr_is2op(i)) p.op2 = cpu->r[INSTR_RY(i)];
+        o(cpu, &p);
+        cpu->r[INSTR_RX(i)] = p.op1;
+        cpu->i_done = !instr_has_spderef(i); // Cx derefs S, more cycles
+    } else if(instr_is_srcptr(i) {
+        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RY(i)]);
+        cpu->r[R_P] += 1 + (INSTR_OPSZ(i) == OP_16);
+    } else if(instr_has_data(i)) {
+        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_P]);
+        cpu->r[R_P] += 1 + instr_has_dw(i);
+    } else {
+        LOGE("unhandled instruction hit in c1:");
+        core_cpu_dump_instr(cpu, &p);
+    }
+}
+
+void core_cpu__exec_c2(struct core_cpu *cpu)
+{
+    static void (*o)(struct core_cpu *, struct core_instr_params *);
+    struct core_instr i = cpu->i;
+    struct core_instr_params p;
+    uint16_t v = INSTR_OPSZ(i) == OP_16 ? core_mmu_rw_fetch_cpu(cpu->mmu) :
+                                          core_mmu_rb_fetch_cpu(cpu->mmu);
+
+    o = core_cpu_ops[INSTR_OP(i)];
+
+    /* Possible cases:
+     * - void: middle of a INT/RTI/RTS, fetch data at s if needed, execute
+     * - reg. only: middle of a Cx, fetch data at s, execute
+     * - src imm. data: execute
+     * - src ptr. data: fetch data at ptr loc
+     * - dst ptr. reg.: send data to ptr loc
+     */
+    if(instr_is_void) {
+        switch(INSTR_OP(i)) {
+            case OP_INT:
+                core_mmu_rw_send_cpu(cpu->mmu, 0xfffe);
+                break;
+            case OP_RTI:
+                cpu->r[R_F] = core_mmu_rw_fetch_cpu(cpu->mmu);
+                core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
+                cpu->r[R_S] += 2;
+                break;
+            case OP_RTS:
+                cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
+                cpu->i_done = 1;
+                break;
+        }
+    } else if(instr_dr_only(i)) {
+        // TODO
+    } else if(!instr_is_srcptr(i) &&
+              (instr_is_op1data(i) || (instr_is_2op(i) && instr_is_op2data(i) &&
+                                       !instr_is_srcptr(i))) {
+        p.op1 = instr_is_op1data(i) ?
+                (INSTR_OPSZ(i) == OP_16 ? INSTR_D16(i) : INSTR_D8)
+                : cpu->r[INSTR_RX(i)];
+        if(instr_is_2op(i)) p.op2 = INSTR_D16(i);
+        o(cpu, &p);
+        cpu->r[INSTR_RX(i)] = p.op1;
+    } else if(instr_is_srcptr(i)) {
+        core_mmu_rw_send_cpu(cpu->mmu, INSTR_D16(i));
+    } else if(instr_is_dstptr(i) && !instr_has_data(i)) {
+        if(INSTR_OPSZ(i) == OP_16)
+            core_mmu_ww_send_cpu(cpu->mmu, INSTR_RX(i));
+        else
+            core_mmu_wb_send_cpu(cpu->mmu, INSTR_RX(i));
+    } else {
+        LOGE("unhandled instruction hit in c2:");
+        core_cpu_dump_instr(cpu, &p);
+    }
+}
+
+void core_cpu__exec_c3(struct core_cpu *cpu)
+{
+    static void (*o)(struct core_cpu *, struct core_instr_params *);
+    struct core_instr i = cpu->i;
+    struct core_instr_params p;
+
+    /* Possible cases:
+     * - void: middle of a INT/RTI, fetch last memory read
+     * - dst ptr. data: send data to data loc
+     * - src ptr. data: execute
+     */
+    if(instr_is_void(i)) {
+        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
+        cpu->i_done = 1;
+    } else if(instr_is_dstptr(i)) {
+        if(INSTR_OPSZ(i) == OP_16)
+            core_mmu_ww_send_cpu(cpu->mmu, INSTR_D16(i));
+        else
+            core_mmu_wb_send_cpu(cpu->mmu, INSTR_D16(i));
+    } else if(instr_is_srcptr(i)) {
+        if(instr_is_1op(i)) {
+            p.op1 = INSTR_OPSZ == OP_16 ? INSTR_D16(i) : INSTR_D8(i);
+        } else {
+            p.op1 = cpu->r[INSTR_RX(i)];
+            p.op2 = INSTR_OPSZ == OP_16 ? INSTR_D16(i) : INSTR_D8(i);
+        }
+        o(cpu, &p);
+    }
+}
+
+void core_cpu__exec_c4(struct core_cpu *cpu)
+{
+    struct core_instr i = cpu->i;
+    struct core_instr_params p;
+
+    /* Possible cases:
+     * - finish up.
+     */
+    if(INSTR_OPSZ(i) == OP_16) {
+        core_mmu_
+    } else {
+    }
+}
+
+void core_cpu_dump_instr(struct core_cpu *cpu, struct core_instr_params *p)
+{
+    uint8_t op = INSTR_OP(cpu->i);
+    uint8_t am = INSTR_AM(cpu->i);
+    
+    LOGE("%04x: op %02xh \"%s\", am %02xh \"%s\"", p.p, op, instrnam[op], am,
+         instr_is_void(cpu->i) ? "<void>" : amnam[am]);
 }
 
 /*
