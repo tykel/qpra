@@ -1,1128 +1,610 @@
 /*
- * core/cpu/cpu.c -- Emulator CPU functions.
- *
- * The CPU functions, notably the instructions, are implemented here.
- *
+ * Khepra CPU core v2 (Experimental)
  */
 
-#include <string.h>
-#include <stdlib.h>
-#include "core/cpu/cpu.h"
-#include "core/cpu/hrc.h"
-#include "core/mmu/mmu.h"
-#include "log.h"
+#include <stdio.h>
 
-extern int hrc_use_rtc;
-
-/* Map of instruction opcode names to strings, for logging. */
-char *instrnam[NUM_INSTRS] = {
-    "nop", /* 00 */
-    "int", /* 01 */
-    "rti", /* 02 */
-    "rts", /* 03 */
-    "jp",  /* 04 */
-    "cl",  /* 05 */
-    "jz",  /* 06 */
-    "cz",  /* 07 */
-    "jc",  /* 08 */
-    "cc",  /* 09 */
-    "jo",  /* 0a */
-    "co",  /* 0b */
-    "jn",  /* 0c */
-    "cn",  /* 0d */
-    "not", /* 0e */
-    "inc", /* 0f */
-    "dec", /* 10 */
-    "ind", /* 11 */
-    "ded", /* 12 */
-    "mv",  /* 13 */
-    "cmp", /* 14 */
-    "tst", /* 15 */
-    "add", /* 16 */
-    "sub", /* 17 */
-    "mul", /* 18 */
-    "div", /* 19 */
-    "lsl", /* 1a */
-    "lsr", /* 1b */
-    "asr", /* 1c */
-    "and", /* 1d */
-    "or",  /* 1e */
-    "xor"  /* 1f */
-};
-
-/* Map of addressing modes to strings, for logging. */
-char *amnam[16] = {
-    "DR", "IR", "DB", "IB", "DW", "IW", "DR_DR", "DR_IR",
-    "IR_DR", "DR_DB", "DR_IB", "DR_DW", "DR_IW", "IB_DR", "IW_DR", "<ILL>"
-};
+#include "cpu.h"
 
 
-/* Initialize the CPU state. Sets up the opcode jump table. */
-int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
-{
-    struct core_cpu *cpu;
-    
-    *pcpu = NULL;
-    *pcpu = malloc(sizeof(struct core_cpu));
-    if(*pcpu == NULL) {
-        LOGE("Could not allocate cpu core; exiting");
-        return 0;
+static inline const char* stagestr(e_stage stage) {
+    switch(stage) {
+        case STAGE_FD: return "STAGE_FD <Fetch/Decode>";
+        case STAGE_FE: return "STAGE_FE <Fetch Extra b>";
+        case STAGE_FP: return "STAGE_FP <Fetch Ptr data>";
+        case STAGE_EX: return "STAGE_EX <EXecute>";
+        case STAGE_ST: return "STAGE_ST <STore>";
+        default: return "<unknown stage>";
     }
-    cpu = *pcpu;
-
-    cpu->mmu = mmu;
-    memset(cpu->r, 0, sizeof(cpu->r));
-    cpu->r[R_S] = 0x9ffe;
-    cpu->r[R_F] |= FLAG_I;
-    cpu->i_cycles = 0;
-    cpu->i = malloc(sizeof(struct core_instr));
-    if(cpu->i == NULL) {
-        LOGE("Could not allocate cpu instruction; exiting");
-        return 0;
-    }
-    memset(cpu->i, 0, sizeof(*cpu->i));
-
-    core_cpu_ops[0x00] = core_cpu_i_op_nop;
-    core_cpu_ops[0x01] = core_cpu_i_op_int;
-    core_cpu_ops[0x02] = core_cpu_i_op_rti;
-    core_cpu_ops[0x03] = core_cpu_i_op_rts;
-    core_cpu_ops[0x04] = core_cpu_i_op_jp;
-    core_cpu_ops[0x05] = core_cpu_i_op_cl;
-    core_cpu_ops[0x06] = core_cpu_i_op_jz;
-    core_cpu_ops[0x07] = core_cpu_i_op_cz;
-    core_cpu_ops[0x08] = core_cpu_i_op_jc;
-    core_cpu_ops[0x09] = core_cpu_i_op_cc;
-    core_cpu_ops[0x0a] = core_cpu_i_op_jo;
-    core_cpu_ops[0x0b] = core_cpu_i_op_co;
-    core_cpu_ops[0x0c] = core_cpu_i_op_jn;
-    core_cpu_ops[0x0d] = core_cpu_i_op_cn;
-    core_cpu_ops[0x0e] = core_cpu_i_op_not;
-    core_cpu_ops[0x0f] = core_cpu_i_op_inc;
-    core_cpu_ops[0x10] = core_cpu_i_op_dec;
-    core_cpu_ops[0x11] = core_cpu_i_op_ind;
-    core_cpu_ops[0x12] = core_cpu_i_op_ded;
-    core_cpu_ops[0x13] = core_cpu_i_op_mv;
-    core_cpu_ops[0x14] = core_cpu_i_op_cmp;
-    core_cpu_ops[0x15] = core_cpu_i_op_tst;
-    core_cpu_ops[0x16] = core_cpu_i_op_add;
-    core_cpu_ops[0x17] = core_cpu_i_op_sub;
-    core_cpu_ops[0x18] = core_cpu_i_op_mul;
-    core_cpu_ops[0x19] = core_cpu_i_op_div;
-    core_cpu_ops[0x1a] = core_cpu_i_op_lsl;
-    core_cpu_ops[0x1b] = core_cpu_i_op_lsr;
-    core_cpu_ops[0x1c] = core_cpu_i_op_asr;
-    core_cpu_ops[0x1d] = core_cpu_i_op_and;
-    core_cpu_ops[0x1e] = core_cpu_i_op_or;
-    core_cpu_ops[0x1f] = core_cpu_i_op_not;
-
-    cpu->hrc = malloc(sizeof(struct core_hrc));
-    if(cpu->hrc == NULL) {
-        LOGW("Could not allocate cpu timer core; exiting");
-        return 0;
-    }
-    memset(cpu->hrc, 0, sizeof(struct core_hrc));
-
-    return 1;
 }
 
+#define FLAG_I (1 << 4)
+#define FLAG_N (1 << 3)
+#define FLAG_O (1 << 2)
+#define FLAG_C (1 << 1)
+#define FLAG_Z (1 << 0)
 
-/* Destroys the core_cpu structure, freeing its memory. */ 
-void core_cpu_destroy(struct core_cpu *cpu)
+static inline int flag_n(struct cpu_state *s) { return !!(s->f & FLAG_N); }
+static inline void setf_n(uint16_t *f, bool e)
 {
-    free(cpu->hrc);
-    free(cpu);
-    cpu = NULL;
+    *f &= ~FLAG_N;
+    *f |= e ? FLAG_N : 0;
+}
+static inline int flag_o(struct cpu_state *s) { return !!(s->f & FLAG_O); }
+static inline void setf_o(uint16_t *f, bool e)
+{
+    *f &= ~FLAG_O;
+    *f |= e ? FLAG_O : 0;
+}
+static inline int flag_c(struct cpu_state *s) { return !!(s->f & FLAG_C); }
+static inline void setf_c(uint16_t *f, bool e)
+{
+    *f &= ~FLAG_C;
+    *f |= e ? FLAG_C : 0;
+}
+static inline int flag_z(struct cpu_state *s) { return !!(s->f & FLAG_Z); }
+static inline void setf_z(uint16_t *f, bool e)
+{
+    *f &= ~FLAG_Z;
+    *f |= e ? FLAG_Z : 0;
 }
 
+#define MODE_RRR    (0 | (0 << 2))
+#define MODE_RIR    (1 | (0 << 2))
+#define MODE_RR     (0 | (1 << 2))
+#define MODE_IR     (1 | (1 << 2))
+#define MODE_p      (0 | (2 << 2))
+#define MODE_P      (1 | (2 << 2))
+#define MODE_PR     (0 | (4 << 2))
+#define MODE_pR     (1 | (4 << 2))
+#define MODE_RP     (2 | (4 << 2))
+#define MODE_Rp     (3 | (4 << 2))
 
-/*
- * Execute one cycle of the current instruction.
- *
- * Each cycle step is a big state machine, with different addressing modes
- * governing the reading of operands (if any), the execution of the instruction,
- * and the writing of the result (if any).
- * 
- * Instructions are thus mostly shielded from these details, and can just focus
- * on the execution steps, rather than how to access the operands.
- */
-void core_cpu_i_cycle(struct core_cpu *cpu)
+#define BIT_MODE (1 << 3)
+
+static inline int op(struct cpu_state *s) { return (s->ib0 >> 4); }
+
+static inline const char* opstr(int op) {
+    switch(op) {
+        case 0: return  "nop";
+        case 1: return  "add s, o, d";
+        case 2: return  "sub s, o, d";
+        case 3: return  "mul s, o, d";
+        case 4: return  "div s, o, d";
+        case 5: return  "lsl s, o, d";
+        case 6: return  "lsr s, o, d";
+        case 7: return  "asr s, o, d";
+        case 8: return  "or s, o, d";
+        case 9: return  "xor s, o, d";
+        case 10: return "and s, o, d";
+        case 11: return "not s, d";
+        case 12: return "mvr s, d";
+        case 13: return "jpx d";
+        case 14: return "jp  d";
+        case 15: return "mvm s, d";
+    }
+}
+
+static inline int mode(struct cpu_state *s)
 {
-    static struct core_instr_params p;
-    static void (*i)(struct core_cpu *, struct core_instr_params *);
-    int *c = &cpu->i_cycles;
+    int o = op(s);
+    int tag = o < 11 ? (0 << 2) : o < 13 ? (1 << 2) : o < 15 ? (2 << 2) : (4 << 2);
+    return (op(s) == 15) ? ((s->ib0 >> 2) & 3) | tag : (!!(s->ib0 & BIT_MODE) | tag);
+}
 
-    core_cpu_hrc_step(cpu);
-    cpu->total_cycles += 1;
-        
-    /* Handle interrupt if pending. */
-    if(cpu->interrupt != INT_NONE && (cpu->r[R_F] & FLAG_I) && !cpu->i_middle) {
-        if(*c == 0) {
-            cpu->r[R_S] -= 2;
-            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
-            *c += 1;
-        } else if(*c == 1) {
-            cpu->r[R_S] -= 2;
-            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
-            *c += 1;
-        } else if(*c == 2) {
-            switch(cpu->interrupt) {
-                case INT_USER_IRQ:
-                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffe);
-                    break;
-                case INT_TIMER_IRQ:
-                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffc);
-                    break;
-                case INT_VIDEO_IRQ:
-                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffa);
-                    break;
-                case INT_AUDIO_IRQ:
-                    core_mmu_rw_send_cpu(cpu->mmu, 0xfff8);
-                    break;
-            }
-            *c += 1;
+static inline const char* modestr(int mode) {
+    switch(mode) {
+        case MODE_RRR: return "MODE_RRR <rs,   ro,  rd>";
+        case MODE_RIR: return "MODE_RIR <rs,   imm, rd>";
+        case MODE_RR: return  "MODE_RR  <rs,   rd     >";
+        case MODE_IR: return  "MODE_IR  <imm,  rd     >";
+        case MODE_p: return   "MODE_p   <[rs]         >";
+        case MODE_P: return   "MODE_P   <[imm]        >";
+        case MODE_PR: return  "MODE_PR  <[imm],rd     >";
+        case MODE_pR: return  "MODE_pR  <[rs], rd     >";
+        case MODE_RP: return  "MODE_RP  <rd,   [imm]  >";
+        case MODE_Rp: return  "MODE_Rp  <rs,   [rd]   >";
+        default: return "<unknown mode>";
+    }
+}
 
-        } else if(*c == 3) {
-            cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
-            cpu->interrupt = INT_NONE;
-            *c = 0;
+#define MASK_SRC_0  (7 << 0)
+#define MASK_SRC_1  (7 << 4)
+#define SHFT_SRC_1  4
+
+static inline int src(struct cpu_state *s)
+{
+    switch(mode(s)) {
+        case MODE_RRR:
+        case MODE_RIR:
+        case MODE_RR:
+            return s->ib0 & MASK_SRC_0;
+        case MODE_p:
+        case MODE_pR:
+        case MODE_RP:
+        case MODE_Rp:
+            return (s->ib1 & MASK_SRC_1) >> SHFT_SRC_1;
+    }
+}
+
+#define MASK_OPD    (7 << 4)
+#define SHFT_OPD    4
+
+static inline int opd(struct cpu_state *s)
+{
+    return (s->ib1 & MASK_OPD) >> SHFT_OPD;
+}
+
+#define MASK_DST_0  (7 << 0)
+#define MASK_DST_1  (7 << 4)
+#define SHFT_DST_1  4
+
+static inline int dst(struct cpu_state *s)
+{
+    switch(mode(s)) {
+        case MODE_RRR:
+        case MODE_Rp:
+            return s->ib1 & MASK_DST_0;
+        case MODE_RIR:
+        case MODE_RR:
+        case MODE_PR:
+            return (s->ib1 & MASK_DST_1) >> SHFT_DST_1;
+        case MODE_IR:
+            return s->ib0 & MASK_DST_0;
+    }
+}
+
+static inline uint16_t imm(struct cpu_state *s)
+{
+    switch(mode(s)) {
+        case MODE_RIR:
+        case MODE_IR:
+        case MODE_PR:
+        case MODE_RP:
+            return (s->ib1 & 1) ? *(uint16_t *)&s->ib2 : *(uint8_t *)&s->ib2;
+        case MODE_P:
+            return (s->ib0 & 1) ? *(uint16_t *)&s->ib1 : *(uint8_t *)&s->ib1;
+    }
+}
+
+#define MASK_FF (3 << 1)
+#define SHFT_FF 1
+
+static inline int ff(struct cpu_state *s)
+{
+    return 1 << ((s->ib0 & MASK_FF) >> SHFT_FF);
+}
+
+static inline int stages(struct cpu_state *s)
+{
+    if(op(s) == 0) return STAGE_FD | STAGE_EX;
+    switch(mode(s)) {
+        case MODE_RRR:      return STAGE_FD | STAGE_EX;
+        case MODE_RIR:      return STAGE_FD | STAGE_FE | STAGE_EX;
+        case MODE_RR:       return STAGE_FD | STAGE_EX;
+        case MODE_IR:       return STAGE_FD | STAGE_FE | STAGE_EX;
+        case MODE_p:        return STAGE_FD | STAGE_FP | STAGE_EX;
+        case MODE_P:
+            if(s->ib0 & 1)  return STAGE_FD | STAGE_FE | STAGE_EX;
+            else            return STAGE_FD | STAGE_EX;
+        case MODE_PR:       return STAGE_FD | STAGE_FE | STAGE_FP | STAGE_EX;
+        case MODE_pR:       return STAGE_FD | STAGE_FP | STAGE_EX;
+        case MODE_RP:       return STAGE_FD | STAGE_FE | STAGE_EX | STAGE_ST;
+        case MODE_Rp:       return STAGE_FD | STAGE_EX | STAGE_ST;
+    }
+}
+
+static inline int cycles(struct cpu_state *s)
+{
+    int o = op(s);
+    int m = mode(s);
+
+    // NOP
+    if(o == 0) return 2;
+    // ADD...AND
+    else if(o < 11) return 2 + (m == MODE_RIR);
+    // NOT, MVR
+    else if(o < 13) return 2 + (m == MODE_IR);
+    // JPx, JP
+    else if(o < 15) return 2 + (m == MODE_p) + (m == MODE_P && (s->ib0 & 1));
+    // MVM
+    else if(o < 16) return 3 + (m == MODE_PR || m == MODE_RP);
+
+    // Should not get here!
+    return -1;
+}
+
+static void cpu_disasm(struct cpu_state *s)
+{
+    int i, o, m;
+    char *ops[] = { 
+        "nop","add","sub","mul","div","lsl","lsr","asr",
+        "or","xor","and","not","mvr","jpx","jp","mvm"
+    };
+    char *regs[] = { "a", "b", "c", "x", "y", "p", "s", "f" };
+
+    o = op(s);
+    m = mode(s);
+    printf("\n%04x: %02x %02x ", s->p_old, s->ib0, s->ib1);
+    if(m == MODE_P && s->ib0 & 1 ||
+       m == MODE_RIR || m == MODE_IR || m == MODE_PR || m == MODE_RP)
+        printf("%02x ", s->ib2);
+    else printf("   ");
+    if((m == MODE_RIR || m == MODE_IR || m == MODE_PR || m == MODE_RP) &&
+       s->ib1 & 1)
+        printf("%02x ", s->ib3);
+    else printf("   ");
+    printf("%s ", ops[o]);
+
+    switch(m) {
+        case MODE_RRR:
+            printf("%s, %s, %s", regs[src(s)], regs[opd(s)], regs[dst(s)]);
+            break;
+        case MODE_RIR:
+            printf("%s, %d, %s", regs[src(s)], imm(s), regs[dst(s)]);
+            break;
+        case MODE_RR:
+            printf("%s, %s", regs[src(s)], regs[dst(s)]);
+            break;
+        case MODE_IR:
+            printf("%d, %s", imm(s), regs[dst(s)]);
+            break;
+        case MODE_p:
+            printf("[%s]", regs[src(s)]);
+            break;
+        case MODE_P: {
+            uint16_t i = imm(s);
+            int8_t   d = *(int8_t *)&i;
+            uint16_t a = (s->ib0 & 1) ? i : (s->p + *(int8_t *)&i);
+            printf("[%04x] (+ %d)", a, d);
+            break;
         }
-        return;
+        case MODE_PR:
+            printf("[%d], %s", imm(s), regs[dst(s)]);
+            break;
+        case MODE_pR:
+            printf("[%s], %s", regs[src(s)], regs[dst(s)]);
+            break;
+        case MODE_RP:
+            printf("%s, [%d]", regs[src(s)], imm(s));
+            break;
+        case MODE_Rp:
+            printf("%s, [%s]", regs[src(s)], regs[dst(s)]);
+            break;
     }
 
-    /* Each cycle has a state machine for every type of instruction. */
-    if(*c == 0) {
-        cpu->i_middle = 1;
-        memset(&p, 0, sizeof(p));
+    printf("\n");
+}
 
-        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_P]);
-        cpu->r[R_P] += 2;
+static inline uint16_t readpc(struct cpu_state *s) {
+    uint16_t pc = *(uint16_t *)&s->m[s->p];
+    s->p += 2;
+    return pc;
+}
 
-        p.p = cpu->r[R_P];
-        p.s = cpu->r[R_S];
-        p.f = cpu->r[R_F];
+// Fetch/Decode cycle
+bool cpu_cycle_fd(struct cpu_state *s)
+{
+    s->p_old = s->p;
+    *(uint16_t *)&s->ib0 = readpc(s);
+    if(mode(s) == MODE_P && s->ib0 & 1) s->p -= 1;
+    if(mode(s) == MODE_pR) s->latch_a = s->r[src(s)];
+    return true;
+}
 
-    } else if(*c == 1) {
-        uint16_t t = core_mmu_rw_fetch_cpu(cpu->mmu);
-        /* Instruction opcode read completed. */
-        cpu->i->ib0 = B_LO(t);
-        cpu->i->ib1 = B_HI(t);
-        i = core_cpu_ops[INSTR_OP(cpu->i)];
-        //LOGW("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
-        
-        /* Nothing else to fetch. */
-        if(instr_is_void(cpu->i)) {
-            cpu->r[R_P] -= 1;
-            p.p = cpu->r[R_P];
-            i(cpu, &p);
-            if(INSTR_OP(cpu->i) == OP_NOP)
-                cpu->i_done = 1;
-        /* Nothing else to fetch. */
-        } else if(instr_dr_only(cpu->i)) {
-            p.op1 = cpu->r[INSTR_RX(cpu->i)];
-            p.op2 = cpu->r[INSTR_RY(cpu->i)];
-            i(cpu, &p);
-            cpu->r[INSTR_RX(cpu->i)] = p.op1;
-            if(instr_is_2op(cpu->i))
-                cpu->r[INSTR_RY(cpu->i)] = p.op2;
-            if(!instr_has_spderef(cpu->i))
-                cpu->i_done = 1;
-        /* Fetch data byte/word after instruction. */
-        } else if(instr_has_data(cpu->i)) {
-            /* Post read request for data bytes */
-            core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_P]);
-            cpu->r[R_P] += instr_has_dw(cpu->i) ? 2 : 1;
-            p.p = cpu->r[R_P];
-        /* Fetch memory operand from source register. */
-        } else if(instr_is_srcptr(cpu->i)) {
-            if(instr_is_1op(cpu->i)) {
-                if(INSTR_OPSZ(cpu->i) == OP_16)
-                    core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
-                else
-                    core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
-            } else {
-                if(INSTR_OPSZ(cpu->i) == OP_16)
-                    core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
-                else
-                    core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
-            }
+// Fetch Extra instruction data cycle
+bool cpu_cycle_fe(struct cpu_state *s)
+{
+    if(mode(s) == MODE_P) {
+        *(uint16_t *)&s->ib1 = readpc(s);
+        if(~s->ib0 & 1) s->p -= 1;
+    } else {
+        *(uint16_t *)&s->ib2 = readpc(s);
+        if(~s->ib1 & 1) s->p -= 1;
+    }
+
+    if(mode(s) == MODE_P || mode(s) == MODE_PR) {
+        s->latch_a = imm(s);
+        // Add the current PC to address latch if relative jump (1 byte offset)
+        if(mode(s) == MODE_P) {
+            s->latch_a = (s->ib0 & 1) ? s->latch_a : *(int8_t *)&s->latch_a + s->p;
         } else {
-            LOGE("core.cpu: invalid state reached (cycle 2)");
+            s->latch_a = (s->ib1 & 1) ? s->latch_a : *(int8_t *)&s->latch_a + s->p;
         }
+    }
 
-    } else if(*c == 2) {
-        if(instr_is_void(cpu->i) || instr_dr_only(cpu->i)) {
-            /* TODO: load memory operands when necessary. */
-            i(cpu, &p);
-            if(INSTR_OP(cpu->i) == OP_RTS)
-                cpu->i_done = 1;
-        } else if(instr_has_data(cpu->i)) {
-            /* Data bytes have been read from memory */
-            uint16_t t = core_mmu_rw_fetch_cpu(cpu->mmu);
-            cpu->i->db0 = B_LO(t);
-            if(instr_has_dw(cpu->i)) {
-                cpu->i->db1 = B_HI(t);
-#ifdef _DEBUG
-                LOGV("core.cpu: data = %02x %02x", cpu->i->db0, cpu->i->db1);
-#endif
+    return true;
+}
+
+// Fetch Pointed data cycle
+bool cpu_cycle_fp(struct cpu_state *s)
+{
+    s->latch_in = s->m[s->latch_a];
+    return true;
+}
+
+// EXecute cycle
+bool cpu_cycle_ex(struct cpu_state *s)
+{
+    int o = op(s);
+    int m = mode(s);
+    struct opdata x;
+
+    // Dissassemble instruction fully
+    cpu_disasm(s);
+
+    // NOP
+    if(!o) {
+        cpu_op_nop(&x);
+        return true;
+    }
+    switch(m) {
+        case MODE_RRR:
+            x.s = s->r[src(s)];
+            x.o = s->r[opd(s)];
+            x.d = &s->r[dst(s)];
+            x.f = &s->f;
+            s->op[o](&x);
+            break;
+        case MODE_RIR:
+            x.s = s->r[src(s)];
+            x.o = imm(s);
+            x.d = &s->r[dst(s)];
+            x.f = &s->f;
+            s->op[o](&x);
+            break;
+        case MODE_RR:
+            x.s = s->r[src(s)];
+            x.d = &s->r[dst(s)];
+            x.f = &s->f;
+            s->op[o](&x);
+            break;
+        case MODE_IR:
+            x.s = imm(s);
+            x.d = &s->r[dst(s)];
+            x.f = &s->f;
+            s->op[o](&x);
+            break;
+        case MODE_p:
+        case MODE_P:
+            if(m == MODE_P) {
+                int i = imm(s);
+                x.s = (s->ib0 & 1) ? i : *(int8_t *)&i + s->p;
             } else {
-#ifdef _DEBUG
-                LOGV("core.cpu: data = %02x", cpu->i->db0);
-#endif
+                x.s = s->latch_in;
             }
-            if(instr_is_op1data(cpu->i)) {
-                p.op1 = (INSTR_AM(cpu->i) == AM_DB) ?
-                    INSTR_D8(cpu->i) : INSTR_D16(cpu->i);
-                if(instr_is_2op(cpu->i))
-                    p.op2 = cpu->r[INSTR_RY(cpu->i)];
+            x.f = &s->f;
+            x.ff = ff(s);
+            x.p = &s->p;
+            s->op[o](&x);
+            break;
+        case MODE_PR:
+        case MODE_pR:
+            x.s = s->latch_in;
+            x.d =&s->r[dst(s)];
+            x.f = &s->f;
+            s->op[o](&x);
+            break;
+        case MODE_RP:
+        case MODE_Rp:
+            if(m == MODE_RP) {
+                // If the W bit is not set, treat imm as 8-bit 2's comp. offset
+                int i = imm(s);
+                s->latch_a = (s->ib1 & 1) ? i : (s->p + *(int8_t *)&i);
             } else {
-                p.op1 = cpu->r[INSTR_RX(cpu->i)];
-                p.op2 = (INSTR_AM(cpu->i) == AM_DR_DB) ?
-                    INSTR_D8(cpu->i) : INSTR_D16(cpu->i);
+                s->latch_a = s->r[dst(s)];
             }
-
-            /* Fetch memory operand for pointer. */
-            if(instr_is_srcptr(cpu->i)) {
-                if(instr_is_1op(cpu->i))
-                    if(INSTR_OPSZ(cpu->i) == OP_16)
-                        core_mmu_rw_send_cpu(cpu->mmu, p.op1);//cpu->r[INSTR_RX(cpu->i)]);
-                    else
-                        core_mmu_rb_send_cpu(cpu->mmu, p.op1);//cpu->r[INSTR_RX(cpu->i)]);
-                else
-                    if(INSTR_OPSZ(cpu->i) == OP_16)
-                        core_mmu_rw_send_cpu(cpu->mmu, p.op2);//cpu->r[INSTR_RY(cpu->i)]);
-                    else
-                        core_mmu_rb_send_cpu(cpu->mmu, p.op2);//cpu->r[INSTR_RY(cpu->i)]);
-            /* Operate directly on data; nothing further to fetch. */
-            } else {
-                i(cpu, &p);
-                if(!instr_is_dstptr(cpu->i)) {
-                    if(instr_is_op1reg(cpu->i))
-                        cpu->r[INSTR_RX(cpu->i)] = p.op1;
-                    cpu->i_done = 1;
-                }
-            }
-        } else if(instr_is_srcptr(cpu->i)) {
-            /* Data has arrived from memory, read back */
-            if(instr_is_1op(cpu->i)) {
-                p.op1 = (INSTR_OPSZ(cpu->i) == OP_16) ? 
-                    core_mmu_rw_fetch_cpu(cpu->mmu) :
-                    core_mmu_rb_fetch_cpu(cpu->mmu);
-            } else {
-                p.op1 = cpu->r[INSTR_RX(cpu->i)];
-                p.op2 = (INSTR_OPSZ(cpu->i) == OP_16) ? 
-                    core_mmu_rw_fetch_cpu(cpu->mmu) :
-                    core_mmu_rb_fetch_cpu(cpu->mmu);
-            }
-
-            i(cpu, &p);
-            if(instr_is_dstptr(cpu->i)) {
-                cpu->r[INSTR_RX(cpu->i)] = p.op1;
-                cpu->i_done = 1;
-            }
-        } else {
-            LOGE("core.cpu: invalid state reached (cycle 3)");
-        }
-
-    } else if(*c == 3) {
-        if(instr_is_void(cpu->i) || instr_dr_only(cpu->i)) {
-            /* TODO: load memory operands when necessary. */
-            i(cpu, &p);
-            if(INSTR_OP(cpu->i) == OP_RTI)
-                cpu->i_done = 1;
-        } else if(instr_has_data(cpu->i)) {
-            if(instr_is_srcptr(cpu->i)) {
-                if(instr_is_1op(cpu->i))
-                    p.op1 = (INSTR_OPSZ(cpu->i) == OP_16) ?
-                        core_mmu_rw_fetch_cpu(cpu->mmu) :
-                        core_mmu_rb_fetch_cpu(cpu->mmu);
-                else {
-                    p.op1 = cpu->r[INSTR_RX(cpu->i)];
-                    p.op2 = (INSTR_OPSZ(cpu->i) == OP_16) ?
-                        core_mmu_rw_fetch_cpu(cpu->mmu) :
-                        core_mmu_rb_fetch_cpu(cpu->mmu);
-                }
-
-                i(cpu, &p);
-                if(!instr_is_dstptr(cpu->i)) {
-                    cpu->r[INSTR_RX(cpu->i)] = p.op1;
-                    cpu->i_done = 1;
-                }
-            } else if(instr_is_dstptr(cpu->i)) {
-                (INSTR_OPSZ(cpu->i) == OP_16) ?
-                    core_mmu_ww_send_cpu(cpu->mmu, INSTR_D16(cpu->i),
-                            cpu->r[INSTR_RY(cpu->i)]) :
-                    core_mmu_wb_send_cpu(cpu->mmu, INSTR_D16(cpu->i),
-                            cpu->r[INSTR_RY(cpu->i)]);
-            }
-        } else if(instr_is_srcptr(cpu->i)) {
-            if(instr_is_dstptr(cpu->i)) {
-                (INSTR_OPSZ(cpu->i) == OP_16) ?
-                    core_mmu_ww_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1) :
-                    core_mmu_wb_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1);
-            }
-        } else {
-            LOGE("core.cpu: reached error state (cycle 4)");
-        }
-
-    } else if(*c == 4) {
-        if(instr_is_void(cpu->i) || instr_dr_only(cpu->i)) {
-            /* TODO: load memory operands when necessary. */
-            i(cpu, &p);
-            if(INSTR_OP(cpu->i) == OP_INT)
-                cpu->i_done = 1;
-        } else if(instr_has_data(cpu->i)) {
-            if(instr_is_srcptr(cpu->i)) {
-                if(instr_is_dstptr(cpu->i)) {
-                    (INSTR_OPSZ(cpu->i) == OP_16) ?
-                        core_mmu_ww_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1) :
-                        core_mmu_wb_send_cpu(cpu->mmu, cpu->r[INSTR_RX(cpu->i)], p.op1);
-                    cpu->i_done = 1;
-                }
-            } else if(instr_is_dstptr(cpu->i)) {
-                /* Write request completed */
-                cpu->i_done = 1;
-            }
-        } else if(instr_is_srcptr(cpu->i)) {
-            if(instr_is_dstptr(cpu->i))
-                /* Write request completed */
-                cpu->i_done = 1;
-        } else {
-            LOGE("core.cpu: reached error state (cycle 5)");
-        }
-    } else if(*c == 5) {
-        if(instr_has_data(cpu->i) &&
-                instr_is_srcptr(cpu->i) && instr_is_dstptr(cpu->i))
-            cpu->i_done = 1;
-    } else {
-        LOGE("core.cpu: reached cycle 6, error");
-        cpu->i_done = 1;
-    }
-
-    *c += 1;
-}
-
-/*
- * Version 2 of the re-entrant CPU cycle emulation function.
- * Focus on modularity and simplicity.
- */
-void core_cpu_i_cycle_v2(struct core_cpu *cpu)
-{
-    int *c = &cpu->i_cycles;
-
-    core_cpu_hrc_step(cpu);
-
-    /* Handle interrupt if pending. */
-    if(core_cpu_handle_interrupt(cpu))
-        return;
-
-    switch(*c) {
-        case 0:
-            core_cpu__fetch_op(cpu);
+            x.s = s->r[src(s)];
+            x.d = &s->latch_out;
+            x.f = &s->f;
+            s->op[o](&x);
             break;
-        case 1:
-            core_cpu__exec_c1(cpu);
+    }
+    return true;
+}
+
+// STore cycle
+bool cpu_cycle_st(struct cpu_state *s)
+{
+    *(uint16_t *)&s->m[s->latch_a] = s->latch_out;
+    return true;
+}
+
+// Execute one cycle in the processor
+bool cpu_cycle(struct cpu_state *s)
+{
+    printf("% 6d: stage: %s\n", s->cycle, stagestr(s->stage));
+    switch(s->stage) {
+        case STAGE_FD:
+            s->ib0 = s->ib1 = s->ib2 = s->ib3 = 0;
+            cpu_cycle_fd(s);
+            // Determine all the stages of this instruction
+            s->istages = stages(s);
+            s->icycles = cycles(s);
+            s->icycle = 1;
             break;
-        case 2:
-            core_cpu__exec_c2(cpu);
+        case STAGE_FE:
+            cpu_cycle_fe(s);
             break;
-        case 3:
-            core_cpu__exec_c3(cpu);
+        case STAGE_FP:
+            cpu_cycle_fp(s);
             break;
-        case 4:
-            core_cpu__exec_c4(cpu);
+        case STAGE_EX:
+            cpu_cycle_ex(s);
             break;
-        case 5:
-            core_cpu__exec_c5(cpu);
+        case STAGE_ST:
+            cpu_cycle_st(s);
             break;
-        default:
-            LOGE("reached invalid cycle %d (%d%s cycle)", *c, "th");
-            return;
     }
-        if(*c == 0) {
-            cpu->r[R_S] -= 2;
-            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
-            *c += 1;
-        } else if(*c == 1) {
-            cpu->r[R_S] -= 2;
-            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
-            *c += 1;
-        } else if(*c == 2) {
-            switch(cpu->interrupt) {
-                case INT_USER_IRQ:
-                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffe);
-                    break;
-                case INT_TIMER_IRQ:
-                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffc);
-                    break;
-                case INT_VIDEO_IRQ:
-                    core_mmu_rw_send_cpu(cpu->mmu, 0xfffa);
-                    break;
-                case INT_AUDIO_IRQ:
-                    core_mmu_rw_send_cpu(cpu->mmu, 0xfff8);
-                    break;
-            }
-            *c += 1;
 
-        } else if(*c == 3) {
-            cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
-            cpu->interrupt = INT_NONE;
-            *c = 0;
-        }
-        return;
+    // Find the next stage in the instruction
+    do s->stage <<= 1; while((s->istages & s->stage) == 0 && s->stage < __STAGE_MAX);
+    // If we hit the end, loop around
+    if(s->stage == __STAGE_MAX) {
+        s->stage = STAGE_FD;
+        printf("----------------------------------------\n");
     }
+    s->cycle += 1;
+    s->icycle += 1;
+
+    return true;
 }
 
-void core_cpu__fetch_op(struct core_cpu *cpu)
+bool cpu_init(struct cpu_state *s)
 {
-    struct core_instr_params p;
+    s->stage = STAGE_FD;
 
-    cpu->i_middle = 1;
-    memset(&p, 0, sizeof(p));
-
-    core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_P]);
-
-    p.p = cpu->r[R_P];
-    p.s = cpu->r[R_S];
-    p.f = cpu->r[R_F];
-
-    cpu->r[R_P] += 2;
+    s->op[0] = cpu_op_nop;
+    s->op[1] = cpu_op_add;
+    s->op[2] = cpu_op_sub;
+    s->op[3] = cpu_op_mul;
+    s->op[4] = cpu_op_div;
+    s->op[5] = cpu_op_lsl;
+    s->op[6] = cpu_op_lsr;
+    s->op[7] = cpu_op_asr;
+    s->op[8] = cpu_op_or;
+    s->op[9] = cpu_op_xor;
+    s->op[10] = cpu_op_and;
+    s->op[11] = cpu_op_not;
+    s->op[12] = cpu_op_mvr;
+    s->op[13] = cpu_op_jpx;
+    s->op[14] = cpu_op_jp;
+    s->op[15] = cpu_op_mvm;
 }
 
-void core_cpu__exec_c1(struct core_cpu *cpu)
+bool cpu_destroy(struct cpu_state *s)
 {
-    static void (*o)(struct core_cpu *, struct core_instr_params *);
-    struct core_instr i = cpu->i;
-    struct core_instr_params p;
-    uint16_t v = core_mmu_rw_fetch_cpu(cpu->mmu);
-
-    cpu->i->ib0 = B_LO(v);
-    cpu->i->ib1 = B_HI(v);
-    o = core_cpu_ops[INSTR_OP(i)];
-
-    /* Possible cases:
-     * - void: rollback PC by 1, execute
-     * - reg. only: assign regs to params, execute, assign params to regs
-     * - reg. ptr: send data read request at INSTR_RY 
-     * - has data: send data read request at p.
-     */
-    if(instr_is_void(i)) {
-        cpu->r[R_P] -= 1;
-        switch(INSTR_OP(i)) {
-            case OP_NOP:
-                o(cpu, &p);
-                cpu->i_done = 1;
-                break;
-            case OP_INT:
-                core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
-                cpu->r[R_P] -= 2;
-                cpu->r[R_F] |= 0x10;
-                break;
-            case OP_RTI:
-            case OP_RTS:
-                core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
-                cpu->r[R_S] += 2;
-                break;
-        }
-    } else if(instr_dr_only(i)) {
-        p.op1 = cpu->r[INSTR_RX(i)];
-        if(instr_is2op(i)) p.op2 = cpu->r[INSTR_RY(i)];
-        o(cpu, &p);
-        cpu->r[INSTR_RX(i)] = p.op1;
-        cpu->i_done = !instr_has_spderef(i); // Cx derefs S, more cycles
-    } else if(instr_is_srcptr(i) {
-        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[INSTR_RY(i)]);
-        cpu->r[R_P] += 1 + (INSTR_OPSZ(i) == OP_16);
-    } else if(instr_has_data(i)) {
-        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_P]);
-        cpu->r[R_P] += 1 + instr_has_dw(i);
-    } else {
-        LOGE("unhandled instruction hit in c1:");
-        core_cpu_dump_instr(cpu, &p);
-    }
+    return true;
 }
 
-void core_cpu__exec_c2(struct core_cpu *cpu)
+// Opcodes (interpreted)
+
+// NOP
+void cpu_op_nop(struct opdata *x) {}
+
+// ADD
+void cpu_op_add(struct opdata *x)
 {
-    static void (*o)(struct core_cpu *, struct core_instr_params *);
-    struct core_instr i = cpu->i;
-    struct core_instr_params p;
-    uint16_t v = INSTR_OPSZ(i) == OP_16 ? core_mmu_rw_fetch_cpu(cpu->mmu) :
-                                          core_mmu_rb_fetch_cpu(cpu->mmu);
-
-    o = core_cpu_ops[INSTR_OP(i)];
-
-    /* Possible cases:
-     * - void: middle of a INT/RTI/RTS, fetch data at s if needed, execute
-     * - reg. only: middle of a Cx, fetch data at s, execute
-     * - src imm. data: execute
-     * - src ptr. data: fetch data at ptr loc
-     * - dst ptr. reg.: send data to ptr loc
-     */
-    if(instr_is_void) {
-        switch(INSTR_OP(i)) {
-            case OP_INT:
-                core_mmu_rw_send_cpu(cpu->mmu, 0xfffe);
-                break;
-            case OP_RTI:
-                cpu->r[R_F] = core_mmu_rw_fetch_cpu(cpu->mmu);
-                core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
-                cpu->r[R_S] += 2;
-                break;
-            case OP_RTS:
-                cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
-                cpu->i_done = 1;
-                break;
-        }
-    } else if(instr_dr_only(i)) {
-        // TODO
-    } else if(!instr_is_srcptr(i) &&
-              (instr_is_op1data(i) || (instr_is_2op(i) && instr_is_op2data(i) &&
-                                       !instr_is_srcptr(i))) {
-        p.op1 = instr_is_op1data(i) ?
-                (INSTR_OPSZ(i) == OP_16 ? INSTR_D16(i) : INSTR_D8)
-                : cpu->r[INSTR_RX(i)];
-        if(instr_is_2op(i)) p.op2 = INSTR_D16(i);
-        o(cpu, &p);
-        cpu->r[INSTR_RX(i)] = p.op1;
-    } else if(instr_is_srcptr(i)) {
-        core_mmu_rw_send_cpu(cpu->mmu, INSTR_D16(i));
-    } else if(instr_is_dstptr(i) && !instr_has_data(i)) {
-        if(INSTR_OPSZ(i) == OP_16)
-            core_mmu_ww_send_cpu(cpu->mmu, INSTR_RX(i));
-        else
-            core_mmu_wb_send_cpu(cpu->mmu, INSTR_RX(i));
-    } else {
-        LOGE("unhandled instruction hit in c2:");
-        core_cpu_dump_instr(cpu, &p);
-    }
+    *x->d = x->s + x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
+    setf_c(x->f, (x->s + x->o) & ~0xffff);
+    setf_o(x->f, (*x->d & 0x8000) ^ (x->s & 0x8000));
+    //printf("add %d, %d = %d\n", x->s, x->o, *x->d);
 }
 
-void core_cpu__exec_c3(struct core_cpu *cpu)
+// SUB
+void cpu_op_sub(struct opdata *x)
 {
-    static void (*o)(struct core_cpu *, struct core_instr_params *);
-    struct core_instr i = cpu->i;
-    struct core_instr_params p;
-
-    /* Possible cases:
-     * - void: middle of a INT/RTI, fetch last memory read
-     * - dst ptr. data: send data to data loc
-     * - src ptr. data: execute
-     */
-    if(instr_is_void(i)) {
-        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
-        cpu->i_done = 1;
-    } else if(instr_is_dstptr(i)) {
-        if(INSTR_OPSZ(i) == OP_16)
-            core_mmu_ww_send_cpu(cpu->mmu, INSTR_D16(i));
-        else
-            core_mmu_wb_send_cpu(cpu->mmu, INSTR_D16(i));
-    } else if(instr_is_srcptr(i)) {
-        if(instr_is_1op(i)) {
-            p.op1 = INSTR_OPSZ == OP_16 ? INSTR_D16(i) : INSTR_D8(i);
-        } else {
-            p.op1 = cpu->r[INSTR_RX(i)];
-            p.op2 = INSTR_OPSZ == OP_16 ? INSTR_D16(i) : INSTR_D8(i);
-        }
-        o(cpu, &p);
-    }
+    *x->d = x->s - x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
+    setf_c(x->f, (x->s - x->o) & ~0xffff);
+    setf_o(x->f, (*x->d & 0x8000) ^ (x->s & 0x8000));
+    //printf("sub %d, %d = %d\n", x->s, x->o, *x->d);
 }
 
-void core_cpu__exec_c4(struct core_cpu *cpu)
+// MUL
+void cpu_op_mul(struct opdata *x)
 {
-    struct core_instr i = cpu->i;
-    struct core_instr_params p;
-
-    /* Possible cases:
-     * - finish up.
-     */
-    if(INSTR_OPSZ(i) == OP_16) {
-        core_mmu_
-    } else {
-    }
+    *x->d = x->s * x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
+    setf_c(x->f, (x->s * x->o) & ~0xffff);
+    setf_o(x->f, (*x->d & 0x8000) ^ (x->s & 0x8000));
 }
 
-void core_cpu_dump_instr(struct core_cpu *cpu, struct core_instr_params *p)
+// DIV
+void cpu_op_div(struct opdata *x)
 {
-    uint8_t op = INSTR_OP(cpu->i);
-    uint8_t am = INSTR_AM(cpu->i);
-    
-    LOGE("%04x: op %02xh \"%s\", am %02xh \"%s\"", p.p, op, instrnam[op], am,
-         instr_is_void(cpu->i) ? "<void>" : amnam[am]);
+    *x->d = x->s / x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
+    setf_c(x->f, (x->s / x->o) & ~0xffff);
+    setf_o(x->f, (*x->d & 0x8000) ^ (x->s & 0x8000));
 }
 
-/*
- * Execute all the cycles for the current instruction.
- */
-void core_cpu_i_instr(struct core_cpu *cpu)
+// LSL
+void cpu_op_lsl(struct opdata *x)
 {
-    uint16_t pc = cpu->r[R_P];
-    cpu->i_cycles = 0;
-    cpu->i_done = 0;
-    cpu->i_middle = 0;
-
-    do {
-        core_cpu_i_cycle(cpu);
-        LOGV("core.cpu: ... cycle %d", cpu->i_cycles);
-        cpu->i_middle = 0;
-    } while(!cpu->i_done);
-
-    LOGV("core.cpu: %04x: %s (%d cycles)",
-         pc, instrnam[INSTR_OP(cpu->i)], cpu->i_cycles);
+    *x->d = x->s << x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
+    setf_c(x->f, x->s & (1 << (16 - x->o)));
 }
 
-/*
- ******************************************************************************
- * Instruction implementations
- ******************************************************************************
- */
-
-/*
- * core_cpu_i_op_nop
- *
- * NOP instruction implementation.
- */
-void core_cpu_i_op_nop(struct core_cpu *cpu, struct core_instr_params *p)
+// LSR
+void cpu_op_lsr(struct opdata *x)
 {
-    /* Literally a no-op... */
+    *x->d = x->s >> x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
+    setf_c(x->f, x->s & (1 << (x->o - 1)));
 }
 
-/*
- * core_cpu_i_op_int
- *
- * INT instruction implementation.
- */
-void core_cpu_i_op_int(struct core_cpu *cpu, struct core_instr_params *p)
+// ASR
+void cpu_op_asr(struct opdata *x)
 {
-    if(cpu->i_cycles == 1) {
-        cpu->r[R_S] -= 2;
-        core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
-        cpu->interrupt = INT_USER_IRQ;
-    } else if(cpu->i_cycles == 2) {
-        cpu->r[R_S] -= 2;
-        core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
-    } else if(cpu->i_cycles == 3) {
-        core_mmu_rw_send_cpu(cpu->mmu, 0xfffe);
-    } else {
-        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
-    }
+    *(int16_t *)x->d = (int16_t)x->s >> x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
+    setf_c(x->f, x->s & (1 << (x->o - 1)));
 }
 
-/*
- * core_cpu_i_op_rti
- *
- * RTI instruction implementation.
- */
-void core_cpu_i_op_rti(struct core_cpu *cpu, struct core_instr_params *p)
+// OR
+void cpu_op_or(struct opdata *x)
 {
-    if(cpu->i_cycles == 1) {
-        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
-        cpu->r[R_S] += 2;
-    } else if(cpu->i_cycles == 2) {
-        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
-        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
-        cpu->r[R_S] += 2;
-        //cpu->interrupt = INT_NONE;
-    } else {
-        cpu->r[R_F] = core_mmu_rw_fetch_cpu(cpu->mmu);
-    }
+    *x->d = x->s | x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
 }
 
-/*
- * core_cpu_i_op_rts
- *
- * RTS instruction implementation.
- */
-void core_cpu_i_op_rts(struct core_cpu *cpu, struct core_instr_params *p)
+// XOR
+void cpu_op_xor(struct opdata *x)
 {
-    if(cpu->i_cycles == 1) {
-        core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
-        cpu->r[R_S] += 2;
-    } else {
-        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
-    }
+    *x->d = x->s ^ x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
 }
 
-void core_cpu_i__jump(struct core_cpu *cpu,
-                      struct core_instr_params *p,
-                      int flag)
+// AND
+void cpu_op_and(struct opdata *x)
 {
-    if(p->f & flag || !flag)
-        cpu->r[R_P] = p->op1;
+    *x->d = x->s & x->o;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
 }
 
-void core_cpu_i__call(struct core_cpu *cpu,
-                      struct core_instr_params *p,
-                      int flag)
+// NOT
+void cpu_op_not(struct opdata *x)
 {
-    if(cpu->i_cycles == p->start_cycle) {
-        if(p->f & flag || !flag) {
-            core_mmu_ww_send_cpu(cpu->mmu, p->s, p->p);
-            cpu->r[R_S] -= 2;
-            cpu->r[R_P] = p->op1;
-        }
-
-    } else {
-        /* Simply need to wait for write of p to m[s] to complete. */
-    }
+    *x->d = ~x->s;
+    setf_z(x->f, *x->d == 0);
+    setf_n(x->f, *x->d & 0x8000);
 }
 
-/*
- * core_cpu_i_op_jp
- *
- * JP instruction implementation.
- */
-void core_cpu_i_op_jp(struct core_cpu *cpu, struct core_instr_params *p)
+// MVR
+void cpu_op_mvr(struct opdata *x)
 {
-    core_cpu_i__jump(cpu, p, 0);
+    *x->f = *x->f & 0xf0;
+    *x->d = x->s;
 }
 
-/*
- * core_cpu_i_op_cl
- *
- * CL instruction implementation.
- */
-void core_cpu_i_op_cl(struct core_cpu *cpu, struct core_instr_params *p)
+// JPx
+void cpu_op_jpx(struct opdata *x)
 {
-    core_cpu_i__call(cpu, p, 0);
+    *x->p = (*x->f & x->ff) ? x->s : *x->p;
 }
 
-/*
- * core_cpu_i_op_jz
- *
- * JZ instruction implementation.
- */
-void core_cpu_i_op_jz(struct core_cpu *cpu, struct core_instr_params *p)
+// JP
+void cpu_op_jp(struct opdata *x)
 {
-    core_cpu_i__jump(cpu, p, FLAG_Z);
+    *x->p = x->s;
 }
 
-/*
- * core_cpu_i_op_cz
- *
- * CZ instruction implementation.
- */
-void core_cpu_i_op_cz(struct core_cpu *cpu, struct core_instr_params *p)
+// MV
+void cpu_op_mvm(struct opdata *x)
 {
-    core_cpu_i__call(cpu, p, FLAG_Z);
+    *x->f = *x->f & 0xf0;
+    *x->d = x->s;
 }
-
-/*
- * core_cpu_i_op_jc
- *
- * JC instruction implementation.
- */
-void core_cpu_i_op_jc(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    core_cpu_i__jump(cpu, p, FLAG_C);
-}
-
-/*
- * core_cpu_i_op_cc
- *
- * CC instruction implementation.
- */
-void core_cpu_i_op_cc(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    core_cpu_i__call(cpu, p, FLAG_C);
-}
-
-/*
- * core_cpu_i_op_jo
- *
- * JO instruction implementation.
- */
-void core_cpu_i_op_jo(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    core_cpu_i__jump(cpu, p, FLAG_O);
-}
-
-/*
- * core_cpu_i_op_co
- *
- * CO instruction implementation.
- */
-void core_cpu_i_op_co(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    core_cpu_i__call(cpu, p, FLAG_O);
-}
-
-/*
- * core_cpu_i_op_jn
- *
- * JN instruction implementation.
- */
-void core_cpu_i_op_jn(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    core_cpu_i__jump(cpu, p, FLAG_N);
-}
-
-/*
- * core_cpu_i_op_cn
- *
- * CN instruction implementation.
- */
-void core_cpu_i_op_cn(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    core_cpu_i__call(cpu, p, FLAG_N);
-}
-
-/*
- * core_cpu_i_op_not
- *
- * NOT instruction implementation.
- */
-void core_cpu_i_op_not(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    p->op1 = ~p->op1;
-}
-
-/*
- * core_cpu_i_op_inc
- *
- * INC instruction implementation.
- */
-void core_cpu_i_op_inc(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    p->op1 += 1;
-}
-
-/*
- * core_cpu_i_op_dec
- *
- * DEC instruction implementation.
- */
-void core_cpu_i_op_dec(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    p->op1 -= 1;
-}
-
-/*
- * core_cpu_i_op_ind
- *
- * IND instruction implementation.
- */
-void core_cpu_i_op_ind(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    p->op1 += 2;
-}
-
-/*
- * core_cpu_i_op_ded
- *
- * DED instruction implementation.
- */
-void core_cpu_i_op_ded(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    p->op1 -= 2;
-}
-
-/*
- * core_cpu_i_op_mv
- *
- * MV instruction implementation.
- */
-void core_cpu_i_op_mv(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    p->op1 = p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N);
-    cpu->r[R_F] |= !p->op1 | ((p->op1 < 0) << 3);
-}
-
-/*
- * core_cpu_i_op_cmp
- *
- * CMP instruction implementation.
- */
-void core_cpu_i_op_cmp(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 - p->op2;
-    int32_t itemp = (int32_t)p->op1 - (int32_t)p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||             /* Z */
-            ((itemp > 0xffff) << 1) ||  /* C */
-            ((itemp > 0x7fff) << 2) ||  /* O */
-            ((temp < 0) << 3);          /* N */
-}
-
-/*
- * core_cpu_i_op_tst
- *
- * TST instruction implementation.
- */
-void core_cpu_i_op_tst(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 & p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N);
-    cpu->r[R_F] |= !temp || ((temp < 0) << 3);
-}
-
-/*
- * core_cpu_i_op_add
- *
- * ADD instruction implementation.
- */
-void core_cpu_i_op_add(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 + p->op2;
-    int32_t itemp = (int32_t)p->op1 + (int32_t)p->op2;
-    p->op1 += p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||            /* Z */
-        ((itemp > 0xffff) << 1) ||     /* C */
-        ((itemp > 0x7fff) << 2) ||     /* O */
-        ((temp < 0) << 3);             /* N */
-}
-
-/*
- * core_cpu_i_op_sub
- *
- * SUB instruction implementation.
- */
-void core_cpu_i_op_sub(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 - p->op2;
-    int32_t itemp = (int32_t)p->op1 - (int32_t)p->op2;
-    p->op1 -= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||            /* Z */
-        ((itemp > 0xffff) << 1) ||     /* C */
-        ((itemp > 0x7fff) << 2) ||     /* O */
-        ((temp < 0) << 3);             /* N */
-}
-
-/*
- * core_cpu_i_op_mul
- *
- * MUL instruction implementation.
- */
-void core_cpu_i_op_mul(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 * p->op2;
-    int32_t itemp = (int32_t)p->op1 * (int32_t)p->op2;
-    p->op1 *= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||            /* Z */
-        ((itemp > 0xffff) << 1) ||     /* C */
-        ((itemp > 0x7fff) << 2) ||     /* O */
-        ((temp < 0) << 3);             /* N */
-}
-
-/*
- * core_cpu_i_op_div
- *
- * DIV instruction implementation.
- */
-void core_cpu_i_op_div(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 / p->op2;
-    int32_t itemp = (int32_t)p->op1 / (int32_t)p->op2;
-    p->op1 /= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||            /* Z */
-        ((itemp > 0xffff) << 1) ||     /* C */
-        ((itemp > 0x7fff) << 2) ||     /* O */
-        ((temp < 0) << 3);             /* N */
-}
-
-/*
- * core_cpu_i_op_lsl
- *
- * LSL instruction implementation.
- */
-void core_cpu_i_op_lsl(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 << p->op2;
-    int32_t itemp = (int32_t)p->op1 << (int32_t)p->op2;
-    p->op1 <<= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||             /* Z */
-            ((itemp > 0xffff) << 1) ||  /* C */
-            ((itemp > 0x7fff) << 2) ||  /* O */
-            ((temp < 0) << 3);          /* N */
-}
-
-/*
- * core_cpu_i_op_lsr
- *
- * LSR instruction implementation.
- */
-void core_cpu_i_op_lsr(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 >> p->op2;
-    uint32_t utemp = (uint32_t)p->op1 >> (uint32_t)p->op2;
-    p->op1 >>= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||             /* Z */
-            ((utemp > 0xffff) << 1) ||  /* C */
-            ((utemp > 0x7fff) << 2) ||  /* O */
-            ((temp < 0) << 3);          /* N */
-}
-
-/*
- * core_cpu_i_op_asr
- *
- * ASR instruction implementation.
- */
-void core_cpu_i_op_asr(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    int16_t temp = *(int16_t *)&p->op1 >> *(int16_t *)&p->op2;
-    int32_t itemp = *(int32_t *)&p->op1 >> *(int32_t *)&p->op2;
-    *(int16_t *)&p->op1 >>= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||             /* Z */
-            ((itemp > 0xffff) << 1) ||  /* C */
-            ((itemp > 0x7fff) << 2) ||  /* O */
-            ((temp < 0) << 3);          /* N */
-}
-
-/*
- * core_cpu_i_op_and
- *
- * AND instruction implementation.
- */
-void core_cpu_i_op_and(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 & p->op2;
-    int32_t itemp = (int32_t)p->op1 & (int32_t)p->op2;
-    p->op1 &= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||             /* Z */
-            ((itemp > 0xffff) << 1) ||  /* C */
-            ((itemp > 0x7fff) << 2) ||  /* O */
-            ((temp < 0) << 3);          /* N */
-}
-
-/*
- * core_cpu_i_op_or
- *
- * OR instruction implementation.
- */
-void core_cpu_i_op_or(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 | p->op2;
-    int32_t itemp = (int32_t)p->op1 | (int32_t)p->op2;
-    p->op1 |= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||             /* Z */
-            ((itemp > 0xffff) << 1) ||  /* C */
-            ((itemp > 0x7fff) << 2) ||  /* O */
-            ((temp < 0) << 3);          /* N */
-}
-
-/*
- * core_cpu_i_op_xor
- *
- * XOR instruction implementation.
- */
-void core_cpu_i_op_xor(struct core_cpu *cpu, struct core_instr_params *p)
-{
-    uint16_t temp = p->op1 ^ p->op2;
-    int32_t itemp = (int32_t)p->op1 ^ (int32_t)p->op2;
-    p->op1 ^= p->op2;
-    cpu->r[R_F] &= ~(FLAG_Z | FLAG_N | FLAG_C | FLAG_O);
-    cpu->r[R_F] |= !temp ||             /* Z */
-            ((itemp > 0xffff) << 1) ||  /* C */
-            ((itemp > 0x7fff) << 2) ||  /* O */
-            ((temp < 0) << 3);          /* N */
-}
-
