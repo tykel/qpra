@@ -22,7 +22,9 @@ instrPattern = r"""
 \s*
 (\[?\$?\w+\]?)?,?       # First operand, optional, with comma
 \s*
-(\[?\$?\w+\]?)?         # Second operand, optional, with comma
+(\[?\$?\w+\]?)?,?       # Second operand, optional, with comma
+\s*
+(\[?\$?\w+\]?)?         # Third operand, optional
 \s*
 (;.+)?                  # Comment, optional
 \s*
@@ -54,98 +56,12 @@ bank_sizes = {
         }
 
 opcodes = {
-        "nop":0, "int":1, "rti":2, "rts":3, "jp":4, "cl":5, "jz":6, "cz":7,
-        "jc":8, "cc":9, "jo":10, "co":11, "jn":12, "cn":13, "not":14, "inc":15,
-        "dec":16, "ind":17, "ded":18, "mv":19, "cmp":20, "tst":21, "add":22,
-        "sub":23, "mul":24, "div":25, "lsl":26, "lsr":27, "asr":28, "and":29,
-        "or":30, "xor":31
+        "nop":0, "add":1, "sub":2, "mul":3, "div":4, "lsl":5, "lsr":6, "asr":7,
+        "or":8, "xor":9, "and":10, "not":11, "mvr":12, "jx":13, "jp":14, "mvm":15
         }
-rr = ["a","b","c","d","e","f"]
+rr = ["a","b","c","x","y","p","s","f"]
 
-regs = { 'a':0, 'b':1, 'c':2, 'd':3, 'e':4, 'f':5, 'p':6, 's':7 }
-
-def getAddrMode(nops, op1, op2, ds):
-    #print 'getAddrMode: ', nops, ': ', op1, ', ', op2, ' -- ', ds
-    if nops == 0:
-        return 0
-    if nops == 1:
-        if re.match("[abcdef]", op1) is not None:
-            return 0
-        elif re.match("\[[abcdef]\]", op1) is not None:
-            return 1
-        elif re.match("(\$[abcdef0-9]{1,2}?)|(\d{1,3}?)", op1) is not None:
-            if num(op1) < 256:
-                return 2
-            else:
-                return 4
-        elif re.match("\w+", op1) is not None and op1 in ds:
-            if num(ds[op1]) < 256:
-                return 2
-            else:
-                return 4
-        elif re.match("\[(\$[abcdef0-9]{1,2}?)|(\d{1,3}?)\]", op1) is not None:
-            if num(op1) < 256:
-                return 3
-            else:
-                return 5
-        elif re.match("\[\w+\]", op1) is not None and op1 in ds:
-            if num(ds[op1]) < 256:
-                return 3
-            else:
-                return 5
-        else:
-            print 'nops1 1 error: invalid operand: ', op1
-            return 0
-    elif nops == 2:
-        if re.match("[abcdef]", op1) is not None:
-            if re.match("[abcdef]", op2) is not None:
-                return 6
-            elif re.match("\[[abcdef]\]", op2) is not None:
-                return 7
-            elif re.match("(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)", op2) is not None:
-                if num(op2) < 256:
-                    return 9
-                else:
-                    return 11
-            elif re.match("\w+", op2) is not None and op2 in ds:
-                if num(ds[op2]) < 256:
-                    return 9
-                else:
-                    return 11
-            elif re.match("\[(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)\]", op2) is not None:
-                if num(op2) < 256:
-                    return 10
-                else:
-                    return 12
-            elif re.match("\[\w+\]", op2) is not None and op2 in ds:
-                if num(ds[op2]) < 256:
-                    return 10
-                else:
-                    return 12
-            else:
-                print 'nops2 1 error: invalid operand: ', op2
-                return 0
-        elif re.match("\[[abcdef]\]", op1) is not None:
-            if re.match("[abcdef]", op2) is not None:
-                return 8
-            else:
-                print 'nop2 2 error: invalid operand: ', op2
-                return 0
-        elif re.match("[abcdef]", op2) is not None:
-            if re.match("\[(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)\]", op1) is not None:
-                if num(op1) < 256:
-                    return 13
-                else:
-                    return 14
-            elif re.match("\[\w+\]", op1) is not None and op1 in ds:
-                if num(ds[op1]) < 256:
-                    return 13
-                else:
-                    return 14
-            else:
-                print 'nops 2 3 error: invalid operand: ', op1
-                return 0
-
+regs = { 'a':0, 'b':1, 'c':2, 'x':3, 'y':4, 'p':5, 's':6, 'f':7 }
 
 
 def num(s):
@@ -160,32 +76,46 @@ def num(s):
     except ValueError:
         return float(s)
 
+def op(b):
+    return b >> 4
+
+def readinstr(mem, pc):
+    bs = []
+
+    b = mem[pc]
+    bs.append(b)
+    o = op(b)
+    if o == 0:
+        return
+
+    b = mem[pc + 1]
+    bs.append(b)
 
 class instr:
-    def __init__(self, strop, op, nops, op1="", op2=""):
+    def __init__(self, strop, op, nops, src="", opd="", dst=""):
         self.strop = strop
         self.op = op
         self.nops = nops
-        if nops > 0:
-            self.op1 = op1
-        if nops > 1:
-            self.op2 = op2
+        self.src = src
+        self.opd = opd
+        self.dst = dst
 
-        if strop in ["nop", "int", "rti", "rts"]:
-            self.size = 1
-        elif nops == 1 and self.op1 in rr:
+        if strop in ["nop","not","mvr","mvm"]:
             self.size = 2
-        elif nops == 2 and self.op1 in rr and self.op2 in rr:
+        elif nops == 1 and self.dst in rr:
             self.size = 2
-        elif getAddrMode(nops, op1, op2, defs) in [2,3,9,10,13]:
+        elif nops == 2 and self.dst in rr and self.opd in rr:
+            self.size = 2
+        elif getAddrMode(nops, dst, opd, defs) in [2,3,9,10,13]:
             self.size = 3
         else:
             self.size = 4
 
     strop = ' '
     op = 0
-    op1 = ' '
-    op2 = ' '
+    src = ' '
+    opd = ' '
+    dst = ' '
     nops = 0
     addr = 0
     size = 0
@@ -202,7 +132,7 @@ def main():
 
     b = 0
     il = [[],[],[],[],[],[]]
-    romname = 'test.kpr'
+    romname = 'test2.kpr'
     org = 0
 
     if(len(sys.argv) < 2):
