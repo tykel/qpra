@@ -1,13 +1,14 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "vpu.h"
-#include "cpu.h"
-
-// FIXME: Temp until this code is integrated back into the emulator
-uint8_t framebuffer[VIS_PIXELS * VIS_SCANLINES * 4];
+#include "core/vpu/vpu.h"
+#include "core/cpu/cpu.h"
+#include "ui/ui.h"
+#include "log.h"
 
 struct rgba *fb;
+
+struct rgba pal_fixed[GLOB_PALETTE_SIZE];
 
 
 static inline int coarse_scroll_l1h(struct vpu_state *vpu) { return (vpu->cpu->m[0xeb82] + 32) % 36; }
@@ -21,9 +22,9 @@ static inline int fine_scroll_l2h(struct vpu_state *vpu) { return vpu->cpu->m[0x
 static inline int fine_scroll_l2v(struct vpu_state *vpu) { return vpu->cpu->m[0xeb89] & 7; }
 
 static inline int scanline_y(int scanline) { return scanline - 16; }
-static inline int cycle_x(int cycle) { return cycle - 25; }
+static inline int cycle_x(int cycle) { return cycle - 65; }
 
-static inline bool in_vblank(int scanline) { return scanline <= 12 || scanline >= 240; }
+static inline bool in_vblank(int scanline) { return scanline <= 15 || scanline >= 240; }
 static inline bool in_hsync(int cycle) { return cycle <= 25; }
 static inline bool in_bp_cb(int cycle) { return cycle >= 26 && cycle <= 64; }
 
@@ -56,7 +57,7 @@ void sprite_pal_get(struct vpu_state *vpu)
     uint8_t *p = &vpu->cpu->m[0xe900 + sp*PALETTE_SIZE];
 
     for(i = 0; i < PALETTE_SIZE; ++i)
-        vpu->sprite_palette[i] = vpu->global_palette[p[i]];
+        vpu->sprite_palette[i] = pal_fixed[p[i]];
 }
 
 struct rgba sprite_px(struct vpu_state *vpu, int i, int x, int y)
@@ -68,14 +69,14 @@ struct rgba sprite_px(struct vpu_state *vpu, int i, int x, int y)
     return c ? vpu->sprite_palette[c] : trans;
 }
 
-void tmap1_pal_get(struct vpu_state *vpu)
+void tl1_pal_get(struct vpu_state *vpu)
 {
     int i;
     uint8_t tp = vpu->cpu->m[0xeb40] & 0x0f;
     uint8_t *p = &vpu->cpu->m[0xe900 + tp*PALETTE_SIZE];
 
     for(i = 0; i < PALETTE_SIZE; ++i)
-        vpu->tl1_palette[i] = vpu->global_palette[p[i]];
+        vpu->tl1_palette[i] = pal_fixed[p[i]];
 }
 
 struct rgba tl1_px(struct vpu_state *vpu, int x, int y)
@@ -96,7 +97,7 @@ void tl2_pal_get(struct vpu_state *vpu)
     uint8_t *p = &vpu->cpu->m[0xe900 + tp*PALETTE_SIZE];
 
     for(i = 0; i < PALETTE_SIZE; ++i)
-        vpu->tl2_palette[i] = vpu->global_palette[p[i]];
+        vpu->tl2_palette[i] = pal_fixed[p[i]];
 }
 
 struct rgba tl2_px(struct vpu_state *vpu, int x, int y)
@@ -113,6 +114,12 @@ bool vpu_init(struct vpu_state *vpu, struct cpu_state *cpu)
 {
     fb = (struct rgba *)framebuffer;
     vpu->cpu = cpu;
+
+    // FIXME: This should be done every frame when relevant MMIO is changed.
+    sprite_pal_get(vpu);
+    tl1_pal_get(vpu);
+    tl2_pal_get(vpu);
+
     return true;
 }
 
@@ -123,7 +130,7 @@ bool vpu_cycle(struct vpu_state *vpu)
     int x = cycle_x(vpu->cycle);
     int y = scanline_y(vpu->scanline);
 
-    printf("% 6d (vpu) x = %d, y = %d\n", vpu->cycle, x, y);
+    LOGV("% 6d (vpu) x = %d, y = %d", vpu->cycle, x, y);
 
     // In VBlank scanlines or the non-visible part of the scanline, do nothing.
     if(in_vblank(vpu->scanline))
@@ -137,16 +144,20 @@ bool vpu_cycle(struct vpu_state *vpu)
     tl2 = tl2_px(vpu, x, y);
     z = 8;
     for(i = 0; i < NUM_SPRITES; ++i) {
+        sprite_get(vpu, i);
         s[i] = sprite_px(vpu, i, x, y);
     }
     // Overlay each visible layer until we get the final pixel.
     // Non-visible layers/sprites return pixels with 0 alpha.
     out = tl2;
-    if(tl1.a) out = tl1;
+    LOGV("picking tl2's pixel, %d %d %d %d", out.r, out.g, out.b, out.a);
+    if(tl1.a) {out = tl1;
+    LOGV("picking tl1's pixel, %d %d %d", out.r, out.g, out.b);}
     for(i = 0; i < NUM_SPRITES; ++i) {
-        if(s[i].a && vpu->s[i].z < z) {
+        if(s[i].a && vpu->sprites[i].z < z) {
             out = s[i];
-            z = vpu->s[i].z;
+            z = vpu->sprites[i].z;
+            LOGV("picking s %d 's pixel, %d %d %d", i, out.r, out.g, out.b);
         }
     }
     // Now emit it!
@@ -168,5 +179,20 @@ __vpu_cycle_inc:
 
 bool vpu_destroy(struct vpu_state *vpu)
 {
+    return true;
+}
+
+bool vpu_init_palette(struct vpu_state *vpu, uint8_t *palette)
+{
+    int i;
+    uint8_t *p = palette;
+
+    for(i = 0; i < 256; ++i) {
+        pal_fixed[i].r = *p++;
+        pal_fixed[i].g = *p++;
+        pal_fixed[i].b = *p++;
+        pal_fixed[i].a = 255; 
+    }
+
     return true;
 }

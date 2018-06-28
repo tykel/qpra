@@ -1,17 +1,18 @@
 #ifndef __vpu_h__
 #define __vpu_h__
 
-#include "common.h"
+#include "core/common.h"
 
-#define NUM_SPRITES     64
-#define PALETTE_SIZE    16
-#define TILE_SIZE       (4*8)
-#define TILES_W_MEM     36
-#define TILES_W_VIS     32
-#define TILES_H_MEM     28
-#define TILES_H_VIS     32
-#define VIS_PIXELS      256
-#define VIS_SCANLINES   224
+#define NUM_SPRITES         64
+#define GLOB_PALETTE_SIZE   256
+#define PALETTE_SIZE        16
+#define TILE_SIZE           (4*8)
+#define TILES_W_MEM         36
+#define TILES_W_VIS         32
+#define TILES_H_MEM         28
+#define TILES_H_VIS         32
+#define VIS_PIXELS          256
+#define VIS_SCANLINES       224
 
 struct vpu_sprite {
     bool enabled;
@@ -49,6 +50,7 @@ struct vpu_state {
 };
 
 bool vpu_init(struct vpu_state *, struct cpu_state *);
+bool vpu_init_palette(struct vpu_state *, uint8_t *);
 bool vpu_cycle(struct vpu_state *);
 bool vpu_destroy(struct vpu_state *);
 

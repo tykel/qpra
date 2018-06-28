@@ -40,11 +40,11 @@ int main(int argc, char **argv)
     /* Spawn the main emulation core thread, if we have a file to load. */
     if(argc > 1) {
         pthread_create(&t_core, NULL, core_entry, &pair);
-        pthread_detach(t_core);
     }
     
     /* Start the GUI thread function. */
     ui_run(window);
-    
+    pthread_join(t_core, NULL);
+
     return 0;
 }

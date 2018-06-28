@@ -11,11 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include "core/core.h"
 #include "core/cpu/cpu.h"
 //#include "core/apu/apu.h"
 #include "core/vpu/vpu.h"
-#include "core/mmu/mmu.h"
+//#include "core/mmu/mmu.h"
 //#include "core/cart/cart.h"
 //#include "core/pad/pad.h"
 #include "log.h"
@@ -40,10 +41,11 @@ void *core_entry(void *data)
     struct core_system *core;
     struct core_temp_banks banks;
     struct timespec tslf;
+    int frame = 0;
     int cycles = 0;
 
     struct arg_pair *pair = (struct arg_pair *)data;
-    
+
     core = malloc(sizeof(struct core_system));
     if(core == NULL) {
         LOGE("Could not allocate core structure");
@@ -60,105 +62,63 @@ void *core_entry(void *data)
         LOGE("System initialization failed; exiting");
         return NULL;
     }
-    
+
     clock_gettime(CLOCK_MONOTONIC_RAW, &tslf);
 
     LOGD("Beginning emulation");
     while(!done()) {
-        //core_vpu_update(core->vpu);
-        //core_vpu_write_fb(core->vpu);
-        uint16_t pc = core->cpu->r[R_P];
-        core->cpu->i_cycles = 0;
-        core->cpu->i_done = 0;
-        core->cpu->i_middle = 0;
+        vpu_cycle(&core->vpu);
+        cpu_cycle(&core->cpu);
+        cycles += 1;
 
-        do {
-            /* Apply any pending read/write requests on the bus. */
-            core_mmu_update(core->cpu->mmu);
-            /* Execute a cycle in the VPU. */
-            core_vpu_cycle(core->vpu, core->cpu->total_cycles);
-            /* Execute an instruction cycle in the CPU. */
-            core_cpu_i_cycle(core->cpu);
-            LOGV("core.cpu: ... cycle %d", core->cpu->i_cycles);
-
-            //core->cpu->i_middle = 0;
-            cycles += 1;
-        } while(!core->cpu->i_done);
-
-        LOGV("core.cpu: %04x: %s (%d cycles)",
-             pc, instrnam[INSTR_OP(core->cpu->i)], core->cpu->i_cycles);
-        //core_vpu_begin_vblank(core->vpu);
-        //for(int i = 0; i < CORE_CYCLES_VBLANK; ++i) {
-        //    core_cpu_i_instr(core->cpu);
-        //}
-        //core_vpu_end_vblank(core->vpu);
-#ifdef _DEBUG
-        getc(stdin);
-#else
-        /* One frame's worth of cycles have been executed, so time to pause. */
         if(cycles >= CORE_CYCLES_F) {
-            struct timespec ts, ts_sleep;
-            static unsigned int frame = 0;
-            unsigned long int ns = 0;
+            long unsigned int elapsed_us;
+            struct timespec tscf;
 
-            clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-            ns = (ts.tv_sec - tslf.tv_sec) * 1000000000;
-            ns += (ts.tv_nsec - tslf.tv_nsec);
-
-            if(frame++ % 30 == 0)
-                LOGD("frame: % 3d.%03dms", ns/1000000, (ns%1000000)/1000);
-
-            if(ns < 16666666) {
-                ts_sleep.tv_sec = 0;
-                ts_sleep.tv_nsec = 16666666 - ns;
-                LOGV("sleeping %d ns", ts_sleep.tv_nsec);
-                nanosleep(&ts_sleep, NULL);
-            }
-
-            clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-            tslf = ts;
+            clock_gettime(CLOCK_MONOTONIC_RAW, &tscf);
+            elapsed_us = (tscf.tv_sec - tslf.tv_sec)*1000000 + (tscf.tv_nsec - tslf.tv_nsec)/1000;
+            usleep((unsigned int)(16666 - elapsed_us));
+            LOGW("frame %d: elapsed %ld us, sleeping %ld us", elapsed_us, 16666 - elapsed_us);
             cycles = 0;
         }
-#endif
     }
+
     LOGD("Finished emulation");
 
     LOGD("Emulation core thread exiting");
 }
 
 
-/* 
+/*
  * Top-level initialization routine.
  * Initializes the various devices in core_system, turn by turn.
  */
 int core_init(struct core_system *core, struct core_temp_banks *banks)
 {
-    struct core_mmu_params mmup;
+//     struct core_mmu_params mmup;
     uint8_t palette[768];
-    
-    mmup.rom_banks = core->header->rom_banks;
-    mmup.ram_banks = core->header->ram_banks;
-    mmup.tile_banks = core->header->tile_banks;
-    mmup.dpcm_banks = core->header->dpcm_banks;
-    if(!core_mmu_init(&core->mmu, &mmup, banks))
-        return 0;
-    
-    if(!core_cpu_init(&core->cpu, core->mmu))
-        return 0;
-    if(!core_mmu_cpu(core->mmu, core->cpu))
-        return 0;
-    if(!core_vpu_init(&core->vpu, core->cpu))
-        return 0;
-    if(!core_mmu_vpu(core->mmu, core->vpu))
+
+//     mmup.rom_banks = core->header->rom_banks;
+//     mmup.ram_banks = core->header->ram_banks;
+//     mmup.tile_banks = core->header->tile_banks;
+//     mmup.dpcm_banks = core->header->dpcm_banks;
+//     if(!core_mmu_init(&core->mmu, &mmup, banks))
+//         return 0;
+
+    if(!cpu_init(&core->cpu))
         return 0;
     if(!core_load_palette(core, palette))
         return 0;
-    if(!core_vpu_init_palette(core->vpu, palette))
+    if(!vpu_init_palette(&core->vpu, palette))
+        return 0;
+    if(!vpu_init(&core->vpu, &core->cpu))
         return 0;
     //core_apu_init(core->apu);
     //core_cart_init(core->cart);
     //core_pad_init(core->pad);
-    
+
+    memcpy(core->cpu.m, banks->rom_f, 16*1024);
+
     LOGD("Core initialized");
     return 1;
 }
@@ -184,7 +144,7 @@ int core_load_rom(struct core_system *core, const char *fn,
         LOGE("Couldn't read full ROM header");
         return 0;
     }
-    
+
     do {
         uint8_t *dst;
         total += fread(&buf, sizeof(uint8_t), sizeof(buf), fp);
@@ -220,7 +180,7 @@ int core_load_rom(struct core_system *core, const char *fn,
         total += fread(dst, sizeof(uint8_t), buf.len, fp);
 
     } while(total < map->size);
-    
+
     fclose(fp);
 
     LOGD("Header: size: %d, rom banks: %d, ram banks: %d, tile banks: %d, "
@@ -240,7 +200,7 @@ int core_load_palette(struct core_system *core, uint8_t *buffer)
 {
     int n;
     FILE *fp = NULL;
-    
+
     fp = fopen(palette_fn, "rb");
     if(fp == NULL) {
         LOGE("Couldn't open palette in '%s'", palette_fn);

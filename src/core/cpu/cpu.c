@@ -3,8 +3,10 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "cpu.h"
+#include "log.h"
 
 
 static inline const char* stagestr(e_stage stage) {
@@ -216,64 +218,71 @@ static inline int cycles(struct cpu_state *s)
 
 static void cpu_disasm(struct cpu_state *s)
 {
+#if LOG_LEVEL < 1
+    return;
+#else
     int i, o, m;
     char *ops[] = { 
         "nop","add","sub","mul","div","lsl","lsr","asr",
         "or","xor","and","not","mvr","jpx","jp","mvm"
     };
     char *regs[] = { "a", "b", "c", "x", "y", "p", "s", "f" };
+    char str[256], *sp;
+    memset(str, 0, 256);
+    sp = str;
 
     o = op(s);
     m = mode(s);
-    printf("\n%04x: %02x %02x ", s->p_old, s->ib0, s->ib1);
+    sp += snprintf(sp, 255, "%04x: %02x %02x ", s->p_old, s->ib0, s->ib1);
     if(m == MODE_P && s->ib0 & 1 ||
        m == MODE_RIR || m == MODE_IR || m == MODE_PR || m == MODE_RP)
-        printf("%02x ", s->ib2);
-    else printf("   ");
+        sp += snprintf(sp, 255, "%02x ", s->ib2);
+    else sp += snprintf(sp, 255, "   ");
     if((m == MODE_RIR || m == MODE_IR || m == MODE_PR || m == MODE_RP) &&
        s->ib1 & 1)
-        printf("%02x ", s->ib3);
-    else printf("   ");
-    printf("%s ", ops[o]);
+        sp += snprintf(sp, 255, "%02x ", s->ib3);
+    else sp += snprintf(sp, 255, "   ");
+    sp += snprintf(sp, 255, "%s ", ops[o]);
 
     switch(m) {
         case MODE_RRR:
-            printf("%s, %s, %s", regs[src(s)], regs[opd(s)], regs[dst(s)]);
+            sp += snprintf(sp, 255, "%s, %s, %s", regs[src(s)], regs[opd(s)], regs[dst(s)]);
             break;
         case MODE_RIR:
-            printf("%s, %d, %s", regs[src(s)], imm(s), regs[dst(s)]);
+            sp += snprintf(sp, 255, "%s, %d, %s", regs[src(s)], imm(s), regs[dst(s)]);
             break;
         case MODE_RR:
-            printf("%s, %s", regs[src(s)], regs[dst(s)]);
+            sp += snprintf(sp, 255, "%s, %s", regs[src(s)], regs[dst(s)]);
             break;
         case MODE_IR:
-            printf("%d, %s", imm(s), regs[dst(s)]);
+            sp += snprintf(sp, 255, "%d, %s", imm(s), regs[dst(s)]);
             break;
         case MODE_p:
-            printf("[%s]", regs[src(s)]);
+            sp += snprintf(sp, 255, "[%s]", regs[src(s)]);
             break;
         case MODE_P: {
             uint16_t i = imm(s);
             int8_t   d = *(int8_t *)&i;
             uint16_t a = (s->ib0 & 1) ? i : (s->p + *(int8_t *)&i);
-            printf("[%04x] (+ %d)", a, d);
+            sp += snprintf(sp, 255, "[%04x] (+ %d)", a, d);
             break;
         }
         case MODE_PR:
-            printf("[%d], %s", imm(s), regs[dst(s)]);
+            sp += snprintf(sp, 255, "[%d], %s", imm(s), regs[dst(s)]);
             break;
         case MODE_pR:
-            printf("[%s], %s", regs[src(s)], regs[dst(s)]);
+            sp += snprintf(sp, 255, "[%s], %s", regs[src(s)], regs[dst(s)]);
             break;
         case MODE_RP:
-            printf("%s, [%d]", regs[src(s)], imm(s));
+            sp += snprintf(sp, 255, "%s, [%d]", regs[src(s)], imm(s));
             break;
         case MODE_Rp:
-            printf("%s, [%s]", regs[src(s)], regs[dst(s)]);
+            sp += snprintf(sp, 255, "%s, [%s]", regs[src(s)], regs[dst(s)]);
             break;
     }
 
-    printf("\n");
+    LOGD("%s", str);
+#endif
 }
 
 static inline uint16_t readpc(struct cpu_state *s) {
@@ -413,7 +422,7 @@ bool cpu_cycle_st(struct cpu_state *s)
 // Execute one cycle in the processor
 bool cpu_cycle(struct cpu_state *s)
 {
-    printf("% 6d: stage: %s\n", s->cycle, stagestr(s->stage));
+    LOGD("% 6d: stage: %s", s->cycle, stagestr(s->stage));
     switch(s->stage) {
         case STAGE_FD:
             s->ib0 = s->ib1 = s->ib2 = s->ib3 = 0;
@@ -442,7 +451,7 @@ bool cpu_cycle(struct cpu_state *s)
     // If we hit the end, loop around
     if(s->stage == __STAGE_MAX) {
         s->stage = STAGE_FD;
-        printf("----------------------------------------\n");
+        LOGD("----------------------------------------");
     }
     s->cycle += 1;
     s->icycle += 1;
@@ -470,6 +479,8 @@ bool cpu_init(struct cpu_state *s)
     s->op[13] = cpu_op_jpx;
     s->op[14] = cpu_op_jp;
     s->op[15] = cpu_op_mvm;
+
+    return true;
 }
 
 bool cpu_destroy(struct cpu_state *s)

@@ -1,9 +1,9 @@
 #ifndef __system_h__
 #define __system_h__
 
-#include "common.h"
-#include "cpu.h"
-#include "vpu.h"
+#include "core/common.h"
+#include "core/cpu/cpu.h"
+#include "core/vpu/vpu.h"
 
 struct system_state {
     struct cpu_state cpu;

@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O2 -D_POSIX_C_SOURCE=199309L -std=c99 -I./src -DLOG_LEVEL=1 #-D_DEBUG
+CFLAGS=-O0 -g -I./src -DLOG_LEVEL=1
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 
@@ -14,8 +14,8 @@ MAIN_SRCS:=$(addprefix $(SRC)/,$(MAIN_SRCS))
 MAIN_SRCS_OBJ:=$(MAIN_SRCS:.c=.o)
 MAIN_SRCS_ALL:=$(addprefix $(SRC)/,$(MAIN_SRCS_ALL))
 
-CORE_SRCS:=core.c cpu/cpu.c cpu/hrc.c mmu/mmu.c vpu/vpu.c
-CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h cpu/hrc.h mmu/mmu.h vpu/vpu.h
+CORE_SRCS:=core.c cpu/cpu.c vpu/vpu.c
+CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h vpu/vpu.h
 
 CORE_SRCS:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS))
 CORE_SRCS_OBJ:=$(CORE_SRCS:.c=.o)
@@ -33,13 +33,16 @@ LIBS+=$(shell sdl2-config --libs)
 
 .PHONY: all clean
 
-all: qpra test.kpr
+all: qpra test test.kpr
 
 qpra: $(MAIN_SRCS_OBJ) $(CORE_SRCS_OBJ) $(UI_SRCS_OBJ)
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) $< -c -o $@ $(LIBS)
+
+test: test/main.c src/log.c $(CORE_SRCS_OBJ)
+	$(CC) $(CFLAGS) $^ -o test/$@
 
 test.kpr: asm/test.s
 	./as.py $<

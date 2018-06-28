@@ -25,7 +25,7 @@ flags:
 ops: 14 = 4 bits
 ===
 
-0   NOP                 ___
+0   NOP                 __ 
 1   ADD S1, S2, D       D = S1 + S2
 2   SUB S1, S2, D       D = S1 - S2
 3   MUL S1, S2, D       D = S1 * S2

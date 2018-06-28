@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "common.h"
+#include "core/common.h"
 
 typedef enum {
     STAGE_FD = 1, STAGE_FE = 2, STAGE_FP = 4, STAGE_EX = 8, STAGE_ST = 16,

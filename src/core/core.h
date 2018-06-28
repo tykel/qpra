@@ -11,6 +11,9 @@
 
 #include <stdint.h>
 
+#include "core/cpu/cpu.h"
+#include "core/vpu/vpu.h"
+
 #define CORE_CYCLES_S               5360520
 
 #ifdef _DEBUG
@@ -22,7 +25,6 @@
 #define CORE_CYCLES_VBLANK          1023
 #define CORE_CYCLES_F_PRE_VBLANK    88319
 #endif
-
 
 enum core_buf_type {
     CORE_HDR_ROMF=0, CORE_HDR_ROMS=1, CORE_HDR_RAMF=2,
@@ -68,12 +70,11 @@ struct core_temp_banks
 
 struct core_system
 {
-    struct core_cpu *cpu;
-    struct core_apu *apu;
-    struct core_vpu *vpu;
-    struct core_mmu *mmu;
-    struct core_cart *cart;
-    struct core_pad *pad;
+    struct cpu_state cpu;
+    struct vpu_state vpu;
+    //struct apu_state apu;
+    //struct core_cart *cart;
+    //struct core_pad *pad;
 
     struct core_header_map *header;
 };

@@ -2,7 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cpu.h"
+#include "core/cpu/cpu.h"
+
+unsigned char framebuffer[256 * 224 * 4];
+
+int done()
+{
+    return 0;
+}
 
 int main(int argc, char *argv)
 {
@@ -27,8 +34,9 @@ int main(int argc, char *argv)
         //       i, i!=1?"s":" ", s.p, s.a, s.b);
         cpu_cycle(&s);
     }
-    //printf("\nAfter %d cycles: p = %04x; a = %04x\n, b = %04x",
-    //       i, s.p, s.a, s.b);
+    printf("\nAfter %d cycles: p = %04x; "
+           "a = %04x, b = %04x\n",
+           i, s.p, s.a, s.b);
 
     cpu_destroy(&s);
 
