@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
+#include <gdk/gdkkeysyms.h>
 #include "ui/ui.h"
 #include "ui/ui_gtk.h"
 #include "ui/gtk_opengl.h"
@@ -145,6 +146,8 @@ struct ui_window * ui_window_new_gtk(void)
    
     g_signal_connect(G_OBJECT(open), "activate",
             G_CALLBACK(ui_gtk_open_file), window->window); 
+    g_signal_connect(G_OBJECT(window->window), "key_press_event",
+            G_CALLBACK(ui_gtk_key_press), NULL);
 
     gtk_widget_show_all(window->window);
 
@@ -188,6 +191,23 @@ gint ui_gtk_open_file(GtkWidget *widget, void *data)
     gtk_widget_destroy(dialog);
 
     return TRUE;
+}
+
+static gboolean ui_gtk_key_press(GtkWidget *widget, GdkEventKey *event, void *data)
+{
+    switch (event->keyval) {
+        case GDK_KEY_o:
+            if (event->state & GDK_CONTROL_MASK) {
+                ui_gtk_open_file(widget, widget);
+            }
+            break;
+        case GDK_KEY_Escape:
+            gtk_widget_destroy(widget);
+            break;
+        default:
+            break;
+    }
+    return FALSE;
 }
 
 static void ui_gtk_quit(GtkWidget *widget, void *data)
