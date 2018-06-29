@@ -13,13 +13,16 @@
 #include "ui/ui.h"
 #include "ui/ui_gtk.h"
 #include "ui/gtk_opengl.h"
-#include "log.h" 
+#include "log.h"
+#include "defs.h"
 
 struct ui_window *window;
 pthread_t t_render;
+extern struct arg_pair s_pair;
 
 int mark_done();
 int done();
+void *core_entry(void *);
 
 int texname;
 
@@ -175,8 +178,12 @@ gint ui_gtk_open_file(GtkWidget *widget, void *data)
     if (res == GTK_RESPONSE_ACCEPT) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
         char *filename = gtk_file_chooser_get_filename(chooser);
+        int i;
         LOGD("ROM file to open: %s", filename);
-        free(filename);
+        s_pair.argc++;
+        s_pair.argv = realloc(s_pair.argv, sizeof(*s_pair.argv) * s_pair.argc);
+        s_pair.argv[s_pair.argc - 1] = filename;
+        pthread_create(&t_core, NULL, core_entry, &s_pair);
     }
     gtk_widget_destroy(dialog);
 
@@ -185,25 +192,23 @@ gint ui_gtk_open_file(GtkWidget *widget, void *data)
 
 static void ui_gtk_quit(GtkWidget *widget, void *data)
 {
-    LOGD("ui_gtk_quit");
     gtk_widget_destroy(window->window);
 }
 
 static gint ui_gtk_quit_delete(GtkWidget *widget, void *data)
 {
-    LOGD("ui_gtk_quit_delete");
     return FALSE;
 }
 
 static void ui_gtk_quit_destroy(GtkWidget *widget, void *data)
 {
-    LOGD("ui_gtk_quit_destroy");
     mark_done();
     pthread_join(t_render, NULL);
     SDL_Quit();
     //gtk_opengl_remove(window->area, window->context);
     //gtk_widget_destroy(window->window);
     //free(window);
+    LOGD("UI thread exiting.");
     gtk_main_quit();
 }
 

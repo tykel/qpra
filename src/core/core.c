@@ -20,16 +20,11 @@
 //#include "core/cart/cart.h"
 //#include "core/pad/pad.h"
 #include "log.h"
+#include "defs.h"
 
 int done();
 
 const char *palette_fn = "palette.bin";
-
-struct arg_pair
-{
-    int argc;
-    char **argv;
-};
 
 
 /*

@@ -7,6 +7,7 @@
  */
 
 #include <time.h>
+#include "defs.h"
 #include "ui/ui.h"
 #include "core/core.h"
 
@@ -18,6 +19,8 @@ static pthread_mutex_t s_done_mutex;
 static volatile int s_done;
 
 struct timespec ts_start;
+
+struct arg_pair s_pair;
 
 int mark_done()
 {
@@ -35,15 +38,11 @@ int done()
     return d;
 }
 
-struct arg_pair
-{
-    int argc;
-    char **argv;
-};
-
 int main(int argc, char **argv)
 {
-    struct arg_pair pair = { argc, argv };
+    s_pair.argc = argc;
+    s_pair.argv = malloc(sizeof(*argv) * argc);
+    memcpy(s_pair.argv, argv, sizeof(*argv) * argc);
 
     pthread_mutex_init(&s_done_mutex, NULL);
 
@@ -55,7 +54,7 @@ int main(int argc, char **argv)
 
     /* Spawn the main emulation core thread, if we have a file to load. */
     if(argc > 1) {
-        pthread_create(&t_core, NULL, core_entry, &pair);
+        pthread_create(&t_core, NULL, core_entry, &s_pair);
     }
     
     /* Start the GUI thread function. */
@@ -65,6 +64,7 @@ int main(int argc, char **argv)
     }
     
     pthread_mutex_destroy(&s_done_mutex);
+    free(s_pair.argv);
 
     return 0;
 }

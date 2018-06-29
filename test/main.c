@@ -13,7 +13,7 @@ int done()
     return 0;
 }
 
-int main(int argc, char *argv)
+int main(int argc, char **argv)
 {
     int i, p = -1;
     struct cpu_state s;
