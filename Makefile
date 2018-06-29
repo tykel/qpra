@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-O0 -g -I./src -DLOG_LEVEL=1
+CFLAGS=-O0 -g -I./src -DLOG_LEVEL=1 -D_DEBUG
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 
@@ -41,12 +41,12 @@ qpra: $(MAIN_SRCS_OBJ) $(CORE_SRCS_OBJ) $(UI_SRCS_OBJ)
 %.o: %.c
 	$(CC) $(CFLAGS) $< -c -o $@ $(LIBS)
 
-test: test/main.c src/log.c $(CORE_SRCS_OBJ)
+test: test/main.o src/log.o $(CORE_SRCS_OBJ)
 	$(CC) $(CFLAGS) $^ -o test/$@
 
 test.kpr: asm/test.s
 	./as.py $<
 
 clean:
-	rm -f qpra test.kpr
+	rm -f qpra 
 	find . -name "*.o" -type f -delete

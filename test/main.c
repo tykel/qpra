@@ -4,6 +4,8 @@
 
 #include "core/cpu/cpu.h"
 
+struct timespec ts_start;
+
 unsigned char framebuffer[256 * 224 * 4];
 
 int done()

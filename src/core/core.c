@@ -77,9 +77,16 @@ void *core_entry(void *data)
 
             clock_gettime(CLOCK_MONOTONIC_RAW, &tscf);
             elapsed_us = (tscf.tv_sec - tslf.tv_sec)*1000000 + (tscf.tv_nsec - tslf.tv_nsec)/1000;
-            usleep((unsigned int)(16666 - elapsed_us));
-            LOGW("frame %d: elapsed %ld us, sleeping %ld us", elapsed_us, 16666 - elapsed_us);
+            if (elapsed_us < 16666) {
+                unsigned int usecs_wait = 16666 - elapsed_us;
+                LOGD("frame %d: elapsed %ld us, sleeping %ld us", frame, elapsed_us, usecs_wait);
+                usleep(usecs_wait);
+            } else {
+                LOGD("frame %d: elapsed %ld us", frame, elapsed_us);
+            }
             cycles = 0;
+            ++frame;
+            tslf = tscf;
         }
     }
 

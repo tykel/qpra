@@ -32,6 +32,7 @@ void *ui_render(void *data)
         gtk_opengl_swap(area);
         usleep(16666);
     }
+    LOGD("Render thread exiting.");
 }
 
 
@@ -128,10 +129,12 @@ struct ui_window * ui_window_new_gtk(void)
     gtk_box_pack_start(GTK_BOX(box), window->area, TRUE, TRUE, 0);
     
     /* Connect events to their callbacks. */
+    g_signal_connect(G_OBJECT(window->window), "delete-event",
+            G_CALLBACK(ui_gtk_quit_delete), NULL);
     g_signal_connect(G_OBJECT(window->window), "destroy",
             G_CALLBACK(ui_gtk_quit_destroy), NULL);
     g_signal_connect(G_OBJECT(quit), "activate",
-            G_CALLBACK(ui_gtk_quit), NULL);
+            G_CALLBACK(ui_gtk_quit), window->window);
     g_signal_connect(window->area, "configure_event",
             G_CALLBACK(gtk_area_configure), window->window);
     g_signal_connect(window->area, "realize",
@@ -144,28 +147,35 @@ struct ui_window * ui_window_new_gtk(void)
 
 void ui_run_gtk(struct ui_window *window)
 {
-    LOGD("main UI thread - init draw then enter gtk_main\n");
+    LOGD("main UI thread - init draw then enter gtk_main");
     ui_draw_init();
     pthread_create(&t_render, NULL, ui_render, window->area);
     
     gtk_main(); 
 }
 
-static void ui_gtk_quit(void)
+static void ui_gtk_quit(GtkWidget *widget, void *data)
 {
-    LOGD("ui_gtk_quit\n");
-    mark_done();
-    free(window);
-    pthread_join(t_render, NULL);
-    gtk_main_quit();
+    LOGD("ui_gtk_quit");
+    gtk_widget_destroy(window->window);
 }
 
-static void ui_gtk_quit_destroy(void)
+static gint ui_gtk_quit_delete(GtkWidget *widget, void *data)
 {
-    LOGD("ui_gtk_quit_destroy\n");
+    LOGD("ui_gtk_quit_delete");
+    return FALSE;
+}
+
+static void ui_gtk_quit_destroy(GtkWidget *widget, void *data)
+{
+    LOGD("ui_gtk_quit_destroy");
+    mark_done();
+    pthread_join(t_render, NULL);
     SDL_Quit();
-    gtk_opengl_remove(window->area, window->context);
-    gtk_widget_destroy(window->window);
+    //gtk_opengl_remove(window->area, window->context);
+    //gtk_widget_destroy(window->window);
+    //free(window);
+    gtk_main_quit();
 }
 
 static void ui_draw_init(void)
@@ -187,7 +197,6 @@ static void ui_draw_init(void)
 
 static void ui_draw_opengl(void)
 {
-    LOGD("ui_draw_opengl\n");
     glClear(GL_COLOR_BUFFER_BIT);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -230,7 +239,7 @@ static int gtk_area_start(GtkWidget *widget, void *data)
     GtkWidget *area = (GtkWidget *) g_object_get_data (G_OBJECT (window), "area");
     GLXContext context = (GLXContext) g_object_get_data (G_OBJECT (window), "context");
 
-    LOGD("gtk_area_start\n");
+    LOGD("gtk_area_start");
     if (gtk_opengl_current (area, context) == TRUE) {                           
         glDisable(GL_DEPTH_TEST);                                               
         glDisable(GL_CULL_FACE);                                                
