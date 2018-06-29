@@ -18,6 +18,7 @@ static void ui_draw_opengl(void);
 static void ui_gtk_quit(GtkWidget *widget, void *data);
 static gint ui_gtk_quit_delete(GtkWidget *widget, void *data);
 static void ui_gtk_quit_destroy(GtkWidget *widget, void *data);
+static gint ui_gtk_open_file(GtkWidget *, void *data);
 static int gtk_area_start(GtkWidget *, void *);
 static int gtk_area_expose(GtkWidget *, cairo_t *cr, gpointer data); 
 static int gtk_area_configure(GtkWidget *, GdkEventConfigure *, void *);

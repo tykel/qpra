@@ -60,9 +60,12 @@ void log_null(const char *format, ...)
 void log_verbose(const char *format, ...)
 {
     va_list arg;
-    
+    uint32_t tid = log_gettid();
+    struct timespec ts_e = log_getelapsedtime();    
+
     va_start(arg, format);
-    printf("[VERBOSE] ");
+    printf("%06u.%03u [% 6u][VERBOSE] ",
+           ts_e.tv_sec, ts_e.tv_nsec / 1000000, tid);
     vprintf(format, arg);
     printf("\n");
 
@@ -80,7 +83,7 @@ void log_debug(const char *format, ...)
     struct timespec ts_e = log_getelapsedtime();    
 
     va_start(arg, format);
-    printf("%08u.%03u [% 6u][DEBUG  ] ",
+    printf("%06u.%03u [% 6u][DEBUG  ] ",
            ts_e.tv_sec, ts_e.tv_nsec / 1000000, tid);
     vprintf(format, arg);
     printf("\n");

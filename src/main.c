@@ -60,7 +60,9 @@ int main(int argc, char **argv)
     
     /* Start the GUI thread function. */
     ui_run(window);
-    pthread_join(t_core, NULL);
+    if (t_core) {
+        pthread_join(t_core, NULL);
+    }
     
     pthread_mutex_destroy(&s_done_mutex);
 

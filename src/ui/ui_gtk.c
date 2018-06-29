@@ -139,7 +139,10 @@ struct ui_window * ui_window_new_gtk(void)
             G_CALLBACK(gtk_area_configure), window->window);
     g_signal_connect(window->area, "realize",
             G_CALLBACK(gtk_area_start), window->window); 
-    
+   
+    g_signal_connect(G_OBJECT(open), "activate",
+            G_CALLBACK(ui_gtk_open_file), window->window); 
+
     gtk_widget_show_all(window->window);
 
     return window;
@@ -152,6 +155,32 @@ void ui_run_gtk(struct ui_window *window)
     pthread_create(&t_render, NULL, ui_render, window->area);
     
     gtk_main(); 
+}
+
+gint ui_gtk_open_file(GtkWidget *widget, void *data)
+{
+    GtkWidget *dialog;
+    GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
+    gint res;
+
+    dialog = gtk_file_chooser_dialog_new("Open ROM File",
+                                         (GtkWindow *)data,
+                                         action,
+                                         ("_Cancel"),
+                                         GTK_RESPONSE_CANCEL,
+                                         ("_Open"),
+                                         GTK_RESPONSE_ACCEPT,
+                                         NULL);
+    res = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (res == GTK_RESPONSE_ACCEPT) {
+        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
+        char *filename = gtk_file_chooser_get_filename(chooser);
+        LOGD("ROM file to open: %s", filename);
+        free(filename);
+    }
+    gtk_widget_destroy(dialog);
+
+    return TRUE;
 }
 
 static void ui_gtk_quit(GtkWidget *widget, void *data)
