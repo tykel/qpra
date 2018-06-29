@@ -7,10 +7,42 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdint.h>
+#include <pthread.h>
 #include "log.h"
 
 FILE *g_logfile = NULL;
 int g_uselog = 0;
+extern struct timespec ts_start;
+
+#ifdef _WIN32
+static uint32_t log_gettid()
+{
+    return 0;
+}
+#else
+#include <unistd.h>
+#include <sys/syscall.h>
+
+static uint32_t log_gettid()
+{
+    return (uint32_t) syscall(SYS_gettid); 
+}
+#endif
+
+static struct timespec log_getelapsedtime()
+{
+    struct timespec ts_now, temp; 
+	clock_gettime(CLOCK_REALTIME, &ts_now);
+	if ((ts_now.tv_nsec - ts_start.tv_nsec) < 0) {
+		temp.tv_sec = ts_now.tv_sec - ts_start.tv_sec - 1;
+		temp.tv_nsec = 1000000000 + ts_now.tv_nsec - ts_start.tv_nsec;
+	} else {
+		temp.tv_sec = ts_now.tv_sec - ts_start.tv_sec;
+		temp.tv_nsec = ts_now.tv_nsec - ts_start.tv_nsec;
+	}
+	return temp;
+}
 
 void log_init(const char *logfile)
 {
@@ -44,9 +76,12 @@ void log_verbose(const char *format, ...)
 void log_debug(const char *format, ...)
 {
     va_list arg;
-    
+    uint32_t tid = log_gettid();
+    struct timespec ts_e = log_getelapsedtime();    
+
     va_start(arg, format);
-    printf("[DEBUG  ] ");
+    printf("%08u.%03u [% 6u][DEBUG  ] ",
+           ts_e.tv_sec, ts_e.tv_nsec / 1000000, tid);
     vprintf(format, arg);
     printf("\n");
 

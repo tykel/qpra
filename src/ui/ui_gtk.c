@@ -13,13 +13,27 @@
 #include "ui/ui.h"
 #include "ui/ui_gtk.h"
 #include "ui/gtk_opengl.h"
+#include "log.h" 
 
 struct ui_window *window;
+pthread_t t_render;
 
 int mark_done();
 int done();
 
 int texname;
+
+
+void *ui_render(void *data)
+{
+    GtkWidget *area = (GtkWidget *)data;
+    while (!done()) {
+        ui_draw_opengl();
+        gtk_opengl_swap(area);
+        usleep(16666);
+    }
+}
+
 
 void ui_init_gtk(int argc, char **argv)
 {
@@ -130,45 +144,28 @@ struct ui_window * ui_window_new_gtk(void)
 
 void ui_run_gtk(struct ui_window *window)
 {
+    LOGD("main UI thread - init draw then enter gtk_main\n");
     ui_draw_init();
+    pthread_create(&t_render, NULL, ui_render, window->area);
     
-    while(!done()) {
-        SDL_Event event;
-
-        while(gtk_events_pending()) {
-            gtk_main_iteration_do(FALSE);
-        }
-        
-        while(SDL_PollEvent(&event)) {
-            switch(event.type) {
-                case SDL_QUIT:
-                    mark_done();
-                default:
-                    break;
-            }
-        }
-
-        ui_draw_opengl();
-        gtk_opengl_swap(window->area);
-    }
-    
-    SDL_Quit();
-    gtk_opengl_remove(window->area, window->context);
-    gtk_widget_destroy(window->window);
+    gtk_main(); 
 }
 
 static void ui_gtk_quit(void)
 {
+    LOGD("ui_gtk_quit\n");
     mark_done();
+    free(window);
+    pthread_join(t_render, NULL);
+    gtk_main_quit();
 }
 
 static void ui_gtk_quit_destroy(void)
 {
-    if(!done())
-        mark_done();
-
-    free(window);
-    exit(0);
+    LOGD("ui_gtk_quit_destroy\n");
+    SDL_Quit();
+    gtk_opengl_remove(window->area, window->context);
+    gtk_widget_destroy(window->window);
 }
 
 static void ui_draw_init(void)
@@ -190,6 +187,7 @@ static void ui_draw_init(void)
 
 static void ui_draw_opengl(void)
 {
+    LOGD("ui_draw_opengl\n");
     glClear(GL_COLOR_BUFFER_BIT);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -232,6 +230,7 @@ static int gtk_area_start(GtkWidget *widget, void *data)
     GtkWidget *area = (GtkWidget *) g_object_get_data (G_OBJECT (window), "area");
     GLXContext context = (GLXContext) g_object_get_data (G_OBJECT (window), "context");
 
+    LOGD("gtk_area_start\n");
     if (gtk_opengl_current (area, context) == TRUE) {                           
         glDisable(GL_DEPTH_TEST);                                               
         glDisable(GL_CULL_FACE);                                                

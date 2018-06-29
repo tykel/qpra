@@ -6,12 +6,16 @@
  *
  */
 
+#include <time.h>
 #include "ui/ui.h"
 #include "core/core.h"
 
 pthread_t t_core;
+pthread_t t_render;
 pthread_t t_audio;
 int g_done;
+
+struct timespec ts_start;
 
 int mark_done()
 {
@@ -32,6 +36,8 @@ struct arg_pair
 int main(int argc, char **argv)
 {
     struct arg_pair pair = { argc, argv };
+
+    clock_gettime(CLOCK_REALTIME, &ts_start);
 
     /* Setup the GUI window and components. */
     ui_init(argc, argv);

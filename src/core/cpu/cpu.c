@@ -281,7 +281,7 @@ static void cpu_disasm(struct cpu_state *s)
             break;
     }
 
-    LOGD("%s", str);
+    //LOGD("%s", str);
 #endif
 }
 
@@ -422,7 +422,7 @@ bool cpu_cycle_st(struct cpu_state *s)
 // Execute one cycle in the processor
 bool cpu_cycle(struct cpu_state *s)
 {
-    LOGD("% 6d: stage: %s", s->cycle, stagestr(s->stage));
+    //LOGD("% 6d: stage: %s", s->cycle, stagestr(s->stage));
     switch(s->stage) {
         case STAGE_FD:
             s->ib0 = s->ib1 = s->ib2 = s->ib3 = 0;
@@ -451,7 +451,7 @@ bool cpu_cycle(struct cpu_state *s)
     // If we hit the end, loop around
     if(s->stage == __STAGE_MAX) {
         s->stage = STAGE_FD;
-        LOGD("----------------------------------------");
+        //LOGD("----------------------------------------");
     }
     s->cycle += 1;
     s->icycle += 1;
