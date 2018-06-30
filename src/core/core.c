@@ -26,6 +26,13 @@ int done();
 
 const char *palette_fn = "palette.bin";
 
+static volatile int s_core_running = 0;
+
+int core_running()
+{
+    return s_core_running;
+}
+
 
 /*
  * Emulation thread entry point.
@@ -58,6 +65,7 @@ void *core_entry(void *data)
         return NULL;
     }
 
+    s_core_running = 1;
     clock_gettime(CLOCK_MONOTONIC_RAW, &tslf);
 
     LOGD("Beginning emulation");

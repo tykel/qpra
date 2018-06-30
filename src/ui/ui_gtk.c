@@ -23,6 +23,7 @@ extern struct arg_pair s_pair;
 
 int mark_done();
 int done();
+int core_running();
 void *core_entry(void *);
 
 int texname;
@@ -178,7 +179,7 @@ gint ui_gtk_open_file(GtkWidget *widget, void *data)
                                          GTK_RESPONSE_ACCEPT,
                                          NULL);
     res = gtk_dialog_run(GTK_DIALOG(dialog));
-    if (res == GTK_RESPONSE_ACCEPT) {
+    if (res == GTK_RESPONSE_ACCEPT && !core_running()) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
         char *filename = gtk_file_chooser_get_filename(chooser);
         int i;
