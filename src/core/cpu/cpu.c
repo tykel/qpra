@@ -309,7 +309,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             }
 
             i(cpu, &p);
-            if(instr_is_dstptr(cpu->i)) {
+            if(!instr_is_dstptr(cpu->i)) {
                 cpu->r[INSTR_RX(cpu->i)] = p.op1;
                 cpu->i_done = 1;
             }
