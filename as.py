@@ -276,6 +276,12 @@ def main():
             org += iii.size
             continue
 
+        # Handle singleton labels
+        result = argx.match(line)
+        if result is not None:
+            if result.group(1) is not None:
+                defs[result.group(1)[:-1]] = org
+
     f.close()
 
     # Write to the output binary file (rom)
@@ -328,11 +334,15 @@ def main():
             op2 = 0
             am = getAddrMode(i.nops, i.op1, i.op2, defs)
             if am in [0,1,6,7,8,9,10,11,12]:
-                if i.op1 in rr or (len(i.op1) > 2 and chr(i.op1,1) in rr):
+                if i.op1 in rr:
                     op1 = regs[i.op1]
-            if am in [6,8,13,14]:
-                if i.op2 in rr or (len(i.op2) > 2 and chr(i.op2,1) in rr):
+                elif (len(i.op1) > 2 and i.op1[1] in rr):
+                    op1 = regs[i.op1[1]]
+            if am in [6,7,8,13,14]:
+                if i.op2 in rr:
                     op2 = regs[i.op2]
+                elif (len(i.op2) == 3 and i.op2[1] in rr):
+                    op2 = regs[i.op2[1]]
             if am in [2,3,4,5,13,14] :
                 if i.op1 in defs:
                     op1 = defs[i.op1]
