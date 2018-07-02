@@ -7,6 +7,10 @@ tags
 backup/*
 src/*.o
 src/core/*.o
+src/core/cpu/*.o
+src/core/vpu/*.o
+src/core/mmu/*.o
 src/ui/*.o
 fb.png
 fb.rgba
+as
