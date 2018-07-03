@@ -400,6 +400,7 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
             if(c >= 65 && c < 321) {
                 struct rgba out, l1, l2, s[VPU_NUM_SPRITES];
                 int i, l1t, st[VPU_NUM_SPRITES];
+                int x = c - 65;
     
                 /* First get RGB and transparency data for each layer and sprite's
                  * pixel. */
@@ -413,8 +414,11 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                                   (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8);
                     int starty = ((*vpu->grp_pos)[grp*2 + 1] +
                                   (((*vpu->spr_ctl)[i*4 + 2] & 0x0f) - 8)*8);
-                    if(enabled && ((c-65) >= startx) && ((c-65) < (startx + 8)) &&
-                            ((scanline-16) >= starty) && ((scanline-16) < (starty + 8))) {
+                    if(enabled &&
+                       (x >= startx) &&
+                       (x < (startx + 8)) &&
+                       ((scanline-16) >= starty) &&
+                       ((scanline-16) < (starty + 8))) {
                         s[i] = core_vpu__get_spx(vpu, scanline, c, i);
                         st[i] = core_vpu__get_st(vpu, scanline, c, i);
                     } else {
@@ -513,17 +517,20 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
                 (VPU_A_TILE_BANK + (a % 2)*2 + (y % 8)*4 +
                  (*vpu->layer2_tm)[(y >> 3)*VPU_TILE_XRES_FULL + ((a - 64) >> 2)]));
     } else if(a < 256) {
-        int i = y / 4;
+        unsigned int ac = a - 128;
+        unsigned int cs = ac >> 2;
         /* At cycle 128, read back last read request for layer 2. */
         if(a == 128)
             *(uint16_t *)&vpu->sl__l2data_w[63 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
         else
-            *(uint16_t *)&vpu->sl__sdata_w[(a - 1 - 128)*2] = core_mmu_rw_fetch_vpu(vpu->mmu);
+            *(uint16_t *)&vpu->sl__sdata_w[(ac - 1)*2] = core_mmu_rw_fetch_vpu(vpu->mmu);
         /* Fetch the tile data for sprite i, where:
          * - i = (scanline - 12) / (8/2) */
         core_mmu_rw_send_vpu(vpu->mmu,
-                (VPU_A_TILE_BANK + (a % 2)*2 + (y % 8)*4 +
-                 (*vpu->spr_ctl)[((a - 128) >> 2) + 3] * VPU_TILE_SZ));
+                (VPU_A_TILE_BANK +                          // Tile bank base
+                 ((*vpu->spr_ctl)[cs + 3] * VPU_TILE_SZ) +  // Offset to sprite tile
+                 ((a & 3) << 1) +                           // Offset due to sl. cycle
+                 ((y & 7) << 2)));                          // Offset due to scanline
     } else if(a == 256) {
         /* Fetch the last word of sprite data. */
         *(uint16_t *)&vpu->sl__sdata_w[127 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
@@ -568,7 +575,7 @@ static struct rgba core_vpu__get_spx(struct core_vpu *vpu, int scanline, int c,
     if(tx < 0)
         return dummy;
     int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
-    uint8_t e = vpu->sl__sdata_r[i*4];
+    uint8_t e = vpu->sl__sdata_r[i*4 + tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
     return pal_fixed[(*vpu->pals)[e]];
@@ -598,7 +605,7 @@ static int core_vpu__get_st(struct core_vpu *vpu, int scanline, int c, int i)
     int tx = (x - (*vpu->grp_pos)[grp*2]) / 2;
     if(tx < 0)
         return 1;
-    uint8_t e = vpu->sl__sdata_r[i*4];
+    uint8_t e = vpu->sl__sdata_r[i*4 + tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
     return !e;
