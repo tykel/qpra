@@ -125,7 +125,7 @@ int core_vpu_init(struct core_vpu **pvpu, struct core_cpu *cpu)
     vpu->layer2_fsy = vpu->mem + 0xb89;
     vpu->tile_s_bank = vpu->mem + 0xb90;
 
-    vpu->rgba_fb = ui_get_fb();
+    vpu->rgba_fb = malloc(VPU_XRES * VPU_YRES * 4);
 
     vpu->sl__l1data_r = vpu->sl__l1data[0];
     vpu->sl__l2data_r = vpu->sl__l2data[0];
@@ -138,6 +138,14 @@ int core_vpu_init(struct core_vpu **pvpu, struct core_cpu *cpu)
     return 1;
 }
 
+
+/* Free all memory allocated by the VPU. */
+int core_vpu_destroy(struct core_vpu *vpu)
+{
+    free(vpu->rgba_fb);
+    free(vpu->mem);
+    free(vpu);
+}
 
 /* Copy the default palette into the VPU's private memory. */
 int core_vpu_init_palette(struct core_vpu *vpu, uint8_t *palette)
@@ -618,9 +626,7 @@ static void core_vpu__write_px(struct core_vpu *vpu, int scanline, int c,
     int y = scanline - 16;
     struct rgba *fb = (struct rgba *) vpu->rgba_fb;
 
-    ui_lock_fb();
     fb[y * 256 + x] = pixel;
-    ui_unlock_fb();
 }
 
 
@@ -629,6 +635,12 @@ void core_vpu_begin_vblank(struct core_vpu *vpu)
 {
     vpu->cpu->interrupt = INT_VIDEO_IRQ;
     vpu->vblank = 1;
+    ui_lock_fb();
+    {
+        void *uifb =  ui_get_fb();
+        memcpy(uifb, vpu->rgba_fb, VPU_XRES * VPU_YRES * 4);
+    }
+    ui_unlock_fb();   
 }
 
 /* Signal the end of the VBlank period. */

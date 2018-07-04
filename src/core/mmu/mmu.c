@@ -225,6 +225,8 @@ int core_mmu_destroy(struct core_mmu *mmu)
         free(dpcm_s[i]);
     free(dpcm_s);
     mmu->dpcm_s = NULL, dpcm_s = NULL;
+    
+    free(mmu);
 
     return 1;
 }

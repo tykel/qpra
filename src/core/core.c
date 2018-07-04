@@ -122,6 +122,8 @@ void *core_entry(void *data)
 #endif
     }
     LOGD("Finished emulation");
+    core_destroy(core);
+    free(core);
 
     LOGD("Emulation core thread exiting");
 }
@@ -160,6 +162,14 @@ int core_init(struct core_system *core, struct core_temp_banks *banks)
     //core_pad_init(core->pad);
     
     LOGD("Core initialized");
+    return 1;
+}
+
+int core_destroy(struct core_system *core)
+{
+    core_vpu_destroy(core->vpu);
+    core_mmu_destroy(core->mmu);
+    core_cpu_destroy(core->cpu);
     return 1;
 }
 

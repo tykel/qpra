@@ -80,6 +80,7 @@ struct core_system
 
 void *core_entry(void *);
 int core_init(struct core_system *, struct core_temp_banks *);
+int core_destroy(struct core_system *core);
 static int core_load_rom(struct core_system *, const char *,
         struct core_temp_banks *);
 static int core_load_palette(struct core_system *, uint8_t *);

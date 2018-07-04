@@ -125,7 +125,6 @@ void core_cpu_destroy(struct core_cpu *cpu)
 {
     free(cpu->hrc);
     free(cpu);
-    cpu = NULL;
 }
 
 
