@@ -398,14 +398,17 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
     
             /* Cycles 65-320: Pixel data! */
             if(c >= 65 && c < 321) {
-                struct rgba out, l1, l2, s[VPU_NUM_SPRITES];
-                int i, l1t, st[VPU_NUM_SPRITES];
+                struct rgba out, l1, l2, s[VPU_NUM_SPRITES] = {0};
+                int i, l1t, st[VPU_NUM_SPRITES] = {0};
                 int x = c - 65;
-    
-                /* First get RGB and transparency data for each layer and sprite's
+                
+                /* Get RGB and transparency data for each layer and sprite's
                  * pixel. */
                 l1 = core_vpu__get_l1px(vpu, scanline, c);
+                out = l1;
                 l1t = core_vpu__get_l1t(vpu, scanline, c);
+                if(l1t)
+                    out = l2;
                 l2 = core_vpu__get_l2px(vpu, scanline, c);
                 for(i = 0; i < VPU_NUM_SPRITES; ++i) {
                     int enabled = !!((*vpu->spr_ctl)[i*4] & 0xf0);
@@ -424,18 +427,8 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                     } else {
                         st[i] = 1;
                     }
-                }
-    
-                //1t = 1;
-                /* Next, draw each pixel on top of each other if not transparent. */
-                out = l1;
-                if(l1t)
-                    out = l2;
-                for(i = 0; i < VPU_NUM_SPRITES; ++i) {
-                    if(((*vpu->spr_ctl)[i*4] & 0xf0) && !st[i]) {
-                        out.r = s[i].r;
-                        out.g = s[i].g;
-                        out.b = s[i].b;
+                    if(enabled && !st[i]) {
+                        out = s[i];
                     }
                 }
     
@@ -518,7 +511,11 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
                  (*vpu->layer2_tm)[(y >> 3)*VPU_TILE_XRES_FULL + ((a - 64) >> 2)]));
     } else if(a < 256) {
         unsigned int ac = a - 128;
-        unsigned int cs = ac >> 2;
+        unsigned int cs = ac / 2;                       // Current sprite
+        unsigned int sg = (*vpu->spr_ctl)[cs*4 + 1];    // Sprite group
+        unsigned int gy0 = (*vpu->grp_pos)[sg*2 + 1];   // Group start y
+        unsigned int sy0 = gy0 + (((*vpu->spr_ctl)[cs*4 + 2] & 0x0f) - 8)*8; // Sprite start y
+        unsigned int csy = y - sy0;                     // Current sprite y
         /* At cycle 128, read back last read request for layer 2. */
         if(a == 128)
             *(uint16_t *)&vpu->sl__l2data_w[63 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
@@ -527,10 +524,10 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
         /* Fetch the tile data for sprite i, where:
          * - i = (scanline - 12) / (8/2) */
         core_mmu_rw_send_vpu(vpu->mmu,
-                (VPU_A_TILE_BANK +                          // Tile bank base
-                 ((*vpu->spr_ctl)[cs + 3] * VPU_TILE_SZ) +  // Offset to sprite tile
-                 ((a & 3) << 1) +                           // Offset due to sl. cycle
-                 ((y & 7) << 2)));                          // Offset due to scanline
+                 VPU_A_TILE_BANK +                          // Tile bank base
+                 ((*vpu->spr_ctl)[cs*4 + 3] * VPU_TILE_SZ) +  // Offset to sprite tile
+                 (csy * 4) +                                // Offset due to scanline
+                 ((a % 2) * 2));                            // Offset due to sl. cycle
     } else if(a == 256) {
         /* Fetch the last word of sprite data. */
         *(uint16_t *)&vpu->sl__sdata_w[127 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
@@ -574,7 +571,7 @@ static struct rgba core_vpu__get_spx(struct core_vpu *vpu, int scanline, int c,
     int tx = (x - (*vpu->grp_pos)[grp*2]) / 2;
     if(tx < 0)
         return dummy;
-    int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
+    //int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
     uint8_t e = vpu->sl__sdata_r[i*4 + tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
@@ -648,7 +645,7 @@ uint8_t core_vpu_readb(struct core_vpu *vpu, uint16_t a)
         return 0;
     }
 #ifdef _DEBUG_MEMORY
-    LOGV("core.vpu: read byte @ $%04x", a);
+    LOGD("core.vpu: read byte @ $%04x", a);
 #endif
     return vpu->mem[a - 0xe000];
 }
@@ -660,7 +657,7 @@ void core_vpu_writeb(struct core_vpu *vpu, uint16_t a, uint8_t v)
         return;
     }
 #ifdef _DEBUG_MEMORY
-    LOGV("core.vpu: wrote %02x @ $%04x", v, a);
+    LOGD("core.vpu: wrote %02x @ $%04x", v, a);
 #endif
     vpu->mem[a - 0xe000] = v;
 }
