@@ -420,14 +420,16 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                 l2 = core_vpu__get_l2px(vpu, scanline, c);
                 for(i = 0; i < VPU_NUM_SPRITES; ++i) {
                     int enabled = !!((*vpu->spr_ctl)[i*4] & 0xf0);
+                    int hdouble = (*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE;
                     uint8_t grp = (*vpu->spr_ctl)[i*4 + 1];
                     int startx = ((*vpu->grp_pos)[grp*2] +
                                   (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8);
+                    int endx = startx + (hdouble ? 16 : 8);
                     int starty = ((*vpu->grp_pos)[grp*2 + 1] +
                                   (((*vpu->spr_ctl)[i*4 + 2] & 0x0f) - 8)*8);
                     if(enabled &&
                        (x >= startx) &&
-                       (x < (startx + 8)) &&
+                       (x < endx) &&
                        ((scanline-16) >= starty) &&
                        ((scanline-16) < (starty + 8))) {
                         s[i] = core_vpu__get_spx(vpu, scanline, c, i);
@@ -579,9 +581,10 @@ static struct rgba core_vpu__get_spx(struct core_vpu *vpu, int scanline, int c,
     int tx = (x - (*vpu->grp_pos)[grp*2]) / 2;
     if(tx < 0)
         return dummy;
-    //int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
-    uint8_t e = vpu->sl__sdata_r[i*4 + tx];
-    e = (c & 1) ? (e >> 4) : (e & 0xf);
+    int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
+    uint8_t e = vpu->sl__sdata_r[i*4 + (tx >> h2)];
+    int lp = h2 ? !(x & 2) : (c & 1);
+    e = lp ? (e >> 4) : (e & 0xf);
 
     return pal_fixed[(*vpu->pals)[e]];
     //return vpu->sl__spal[e];
@@ -610,8 +613,10 @@ static int core_vpu__get_st(struct core_vpu *vpu, int scanline, int c, int i)
     int tx = (x - (*vpu->grp_pos)[grp*2]) / 2;
     if(tx < 0)
         return 1;
-    uint8_t e = vpu->sl__sdata_r[i*4 + tx];
-    e = (c & 1) ? (e >> 4) : (e & 0xf);
+    int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
+    uint8_t e = vpu->sl__sdata_r[i*4 + (tx >> h2)];
+    int lp = h2 ? !(x & 2) : (c & 1);
+    e = lp ? (e >> 4) : (e & 0xf);
 
     return !e;
 }
