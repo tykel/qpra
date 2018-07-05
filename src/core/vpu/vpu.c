@@ -421,17 +421,19 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                 for(i = 0; i < VPU_NUM_SPRITES; ++i) {
                     int enabled = !!((*vpu->spr_ctl)[i*4] & 0xf0);
                     int hdouble = (*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE;
+                    int vdouble = (*vpu->spr_ctl)[i*4] & VPU_SPR_VDOUBLE;
                     uint8_t grp = (*vpu->spr_ctl)[i*4 + 1];
                     int startx = ((*vpu->grp_pos)[grp*2] +
                                   (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8);
                     int endx = startx + (hdouble ? 16 : 8);
                     int starty = ((*vpu->grp_pos)[grp*2 + 1] +
                                   (((*vpu->spr_ctl)[i*4 + 2] & 0x0f) - 8)*8);
+                    int endy = starty + (vdouble ? 16 : 8);
                     if(enabled &&
                        (x >= startx) &&
                        (x < endx) &&
                        ((scanline-16) >= starty) &&
-                       ((scanline-16) < (starty + 8))) {
+                       ((scanline-16) < endy)) {
                         s[i] = core_vpu__get_spx(vpu, scanline, c, i);
                         st[i] = core_vpu__get_st(vpu, scanline, c, i);
                     } else {
@@ -522,10 +524,11 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
     } else if(a < 256) {
         unsigned int ac = a - 128;
         unsigned int cs = ac / 2;                       // Current sprite
+        int vd = (*vpu->spr_ctl)[cs*4] & VPU_SPR_VDOUBLE;
         unsigned int sg = (*vpu->spr_ctl)[cs*4 + 1];    // Sprite group
         unsigned int gy0 = (*vpu->grp_pos)[sg*2 + 1];   // Group start y
         unsigned int sy0 = gy0 + (((*vpu->spr_ctl)[cs*4 + 2] & 0x0f) - 8)*8; // Sprite start y
-        unsigned int csy = y - sy0;                     // Current sprite y
+        unsigned int csy = (y - sy0) >> vd;             // Current sprite y
         /* At cycle 128, read back last read request for layer 2. */
         if(a == 128)
             *(uint16_t *)&vpu->sl__l2data_w[63 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
