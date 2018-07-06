@@ -9,15 +9,15 @@ init:       mv a, v_handler0    ; load the initial video IRQ handler address
 
 loop:       jp loop             ; loop until the video IRQ
 
-v_handler0: mv a, $80           ; set Enable bit and H-Double bit
+v_handler0: mv a, $84           ; set Enable bit and H-Double bit
             mv.b [$ea00], a     ; update sprite 0 reg.
-            mv a, $80           ; set Enable bit and H-Double bit
+            mv a, $81           ; set Enable bit and H-Double bit
             mv.b [$ea04], a     ; update sprite 1 reg.
             mv a, $00           ; set sprite group to 0
             mv.b [$ea01], a     ; update sprite 0 reg.
             mv a, $01           ; set sprite group to 1
             mv.b [$ea05], a     ; update sprite 1 reg.
-            mv a, $88           ; set x and y sprite group offsets to 0
+            mv a, $89           ; set x and y sprite group offsets to 0
             mv.b [$ea02], a     ; update sprite 0 reg.
             mv a, $88           ; set x and y sprite group offsets to 0
             mv.b [$ea06], a     ; update sprite 1 reg.
@@ -26,8 +26,9 @@ v_handler0: mv a, $80           ; set Enable bit and H-Double bit
             mv.b [$ea07], a     ; update sprite 1 reg.
             mv a, 0             ; use palette 0
             mv [$eb81], a       ; update sprite palette reg.
+            mv a, $7000         ; y = 96
             mv [$eb00], a       ; update group 0 pos.
-            mv a, 16            ; use palette 0
+            mv a, $0010         ; x = 16
             mv [$eb02], a       ; update group 1 pos.
             mv a, $03           ; random color
             mv.b [$e900], a     ; update palette 0, entry 0
@@ -55,6 +56,10 @@ v_handler1: inc c
             lsl e, 9
             or d, e
             mv [$eb02], d       ; update group 0 pos.
+            mv d, c
+            lsr d, 4
+            add d, $80
+            mv.b [$ea02], d
             rti
 
 ;------------------------------------------------------------------------------
@@ -128,13 +133,13 @@ sin_lut:
 .bank tile_swap 0
 
 .db $00,$00,$00,$00,
+.db $00,$00,$01,$00,
+.db $01,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$01,
 .db $00,$00,$00,$00,
 .db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
+.db $00,$10,$00,$00,
 
 .db $01,$11,$11,$10,
 .db $11,$11,$11,$11,
@@ -162,13 +167,4 @@ sin_lut:
 .db $10,$10,$10,$10,
 .db $01,$01,$01,$01,
 .db $10,$10,$10,$10,
-
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $01,$00,$01,$00,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$01,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $00,$10,$00,$00,
 
