@@ -61,12 +61,12 @@ static inline int core_vpu__spr_group(struct core_vpu_sprite *spr) {
 
 static inline int core_vpu__spr_xoffs(struct core_vpu_sprite *spr) {
     int offs = (spr->b2 & VPU_SPR_XOFFSET) >> 4;
-    return (offs & 0x8) ? (~(VPU_SPR_XOFFSET>>4) | offs) : offs;
+    return (offs - 8) * 8;
 }
 
 static inline int core_vpu__spr_yoffs(struct core_vpu_sprite *spr) {
     int offs = (spr->b2 & VPU_SPR_YOFFSET);
-    return (offs & 0x8) ? (~VPU_SPR_YOFFSET | offs) : offs;
+    return (offs - 8) * 8;
 }
 
 static inline int core_vpu__spr_tile(struct core_vpu_sprite *spr) {
@@ -419,28 +419,22 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                     out = l2;
                 l2 = core_vpu__get_l2px(vpu, scanline, c);
                 for(i = 0; i < VPU_NUM_SPRITES; ++i) {
-                    int enabled = !!((*vpu->spr_ctl)[i*4] & 0xf0);
-                    int hdouble = (*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE;
-                    int vdouble = (*vpu->spr_ctl)[i*4] & VPU_SPR_VDOUBLE;
-                    uint8_t grp = (*vpu->spr_ctl)[i*4 + 1];
-                    int startx = ((*vpu->grp_pos)[grp*2] +
-                                  (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8);
+                    struct core_vpu_sprite *spr = (void *)&(*vpu->spr_ctl)[i*4];
+                    int enabled = core_vpu__spr_enabled(spr);
+                    int hdouble = core_vpu__spr_hdouble(spr);
+                    int vdouble = core_vpu__spr_vdouble(spr);
+                    uint8_t grp = core_vpu__spr_group(spr);
+                    int startx = (*vpu->grp_pos)[grp*2] + core_vpu__spr_xoffs(spr);
                     int endx = startx + (hdouble ? 16 : 8);
-                    int starty = ((*vpu->grp_pos)[grp*2 + 1] +
-                                  (((*vpu->spr_ctl)[i*4 + 2] & 0x0f) - 8)*8);
+                    int starty = (*vpu->grp_pos)[grp*2 + 1] + core_vpu__spr_yoffs(spr);
                     int endy = starty + (vdouble ? 16 : 8);
                     if(enabled &&
                        (x >= startx) &&
                        (x < endx) &&
                        ((scanline-16) >= starty) &&
                        ((scanline-16) < endy)) {
-                        s[i] = core_vpu__get_spx(vpu, scanline, c, i);
-                        st[i] = core_vpu__get_st(vpu, scanline, c, i);
-                    } else {
-                        st[i] = 1;
-                    }
-                    if(enabled && !st[i]) {
-                        out = s[i];
+                        if (!core_vpu__get_st(vpu, scanline, c, i))
+                            out = core_vpu__get_spx(vpu, scanline, c, i);
                     }
                 }
     
