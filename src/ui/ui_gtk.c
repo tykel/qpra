@@ -107,7 +107,7 @@ struct ui_window * ui_window_new_gtk(void)
     g_object_set_data(G_OBJECT(window->window), "area", window->area);
     g_object_set_data(G_OBJECT(window->window), "context", window->context);
     
-    gtk_widget_set_size_request(window->window, 768, 672); //512, 448);
+    gtk_widget_set_size_request(window->area, 768, 672);
     gtk_window_set_resizable (GTK_WINDOW(window->window), FALSE);
 
     gtk_box_pack_start(GTK_BOX(box), menubar, FALSE, FALSE, 0);
