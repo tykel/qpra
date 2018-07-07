@@ -7,7 +7,6 @@
 #ifndef QPRA_CORE_HRC_H
 #define QPRA_CORE_HRC_H
 
-#define _POSIX_C_SOURCE 199309L
 #include <time.h>
 
 #include "core/cpu/cpu.h"

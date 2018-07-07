@@ -412,15 +412,13 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                 
                 /* Get RGB and transparency data for each layer and sprite's
                  * pixel. */
-                l1 = core_vpu__get_l1px(vpu, scanline, c);
-                out = l1;
-                l1t = core_vpu__get_l1t(vpu, scanline, c);
-                if(l1t)
-                    out = l2;
-                l2 = core_vpu__get_l2px(vpu, scanline, c);
+                out = core_vpu__get_l2px(vpu, scanline, c);
+                if (!core_vpu__get_l1t(vpu, scanline, c))
+                    out = core_vpu__get_l1px(vpu, scanline, c);
                 for(i = 0; i < VPU_NUM_SPRITES; ++i) {
                     struct core_vpu_sprite *spr = (void *)&(*vpu->spr_ctl)[i*4];
-                    int enabled = core_vpu__spr_enabled(spr);
+                    if (!core_vpu__spr_enabled(spr))
+                        continue;
                     int hdouble = core_vpu__spr_hdouble(spr);
                     int vdouble = core_vpu__spr_vdouble(spr);
                     uint8_t grp = core_vpu__spr_group(spr);
@@ -428,8 +426,7 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                     int endx = startx + (hdouble ? 16 : 8);
                     int starty = (*vpu->grp_pos)[grp*2 + 1] + core_vpu__spr_yoffs(spr);
                     int endy = starty + (vdouble ? 16 : 8);
-                    if(enabled &&
-                       (x >= startx) &&
+                    if((x >= startx) &&
                        (x < endx) &&
                        ((scanline-16) >= starty) &&
                        ((scanline-16) < endy)) {
