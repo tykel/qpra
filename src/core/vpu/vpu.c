@@ -31,46 +31,46 @@ static inline int core_vpu__pal_l2(struct core_vpu *vpu) {
     return (*vpu->layers_pi & VPU_LAYER2_PI);
 }
 
-static inline int core_vpu__spr_enabled(struct core_vpu_sprite *spr) {
-    return !!(spr->b0 & VPU_SPR_ENABLE);
+static inline int core_vpu__spr_enabled(struct core_vpu_sprite spr) {
+    return !!(spr.b0 & VPU_SPR_ENABLE);
 }
 
-static inline int core_vpu__spr_depth(struct core_vpu_sprite *spr) {
-    return (spr->b0 & VPU_SPR_DEPTH) >> 4; 
+static inline int core_vpu__spr_depth(struct core_vpu_sprite spr) {
+    return (spr.b0 & VPU_SPR_DEPTH) >> 4; 
 }
 
-static inline int core_vpu__spr_hmirror(struct core_vpu_sprite *spr) {
-    return !!(spr->b0 & VPU_SPR_HMIRROR);
+static inline int core_vpu__spr_hmirror(struct core_vpu_sprite spr) {
+    return !!(spr.b0 & VPU_SPR_HMIRROR);
 }
 
-static inline int core_vpu__spr_vmirror(struct core_vpu_sprite *spr) {
-    return !!(spr->b0 & VPU_SPR_VMIRROR);
+static inline int core_vpu__spr_vmirror(struct core_vpu_sprite spr) {
+    return !!(spr.b0 & VPU_SPR_VMIRROR);
 }
 
-static inline int core_vpu__spr_hdouble(struct core_vpu_sprite *spr) {
-    return !!(spr->b0 & VPU_SPR_HDOUBLE);
+static inline int core_vpu__spr_hdouble(struct core_vpu_sprite spr) {
+    return !!(spr.b0 & VPU_SPR_HDOUBLE);
 }
 
-static inline int core_vpu__spr_vdouble(struct core_vpu_sprite *spr) {
-    return !!(spr->b0 & VPU_SPR_VDOUBLE);
+static inline int core_vpu__spr_vdouble(struct core_vpu_sprite spr) {
+    return !!(spr.b0 & VPU_SPR_VDOUBLE);
 }
 
-static inline int core_vpu__spr_group(struct core_vpu_sprite *spr) {
-    return (spr->b1 & VPU_SPR_GROUP);
+static inline int core_vpu__spr_group(struct core_vpu_sprite spr) {
+    return (spr.b1 & VPU_SPR_GROUP);
 }
 
-static inline int core_vpu__spr_xoffs(struct core_vpu_sprite *spr) {
-    int offs = (spr->b2 & VPU_SPR_XOFFSET) >> 4;
+static inline int core_vpu__spr_xoffs(struct core_vpu_sprite spr) {
+    int offs = (spr.b2 & VPU_SPR_XOFFSET) >> 4;
     return (offs - 8) * 8;
 }
 
-static inline int core_vpu__spr_yoffs(struct core_vpu_sprite *spr) {
-    int offs = (spr->b2 & VPU_SPR_YOFFSET);
+static inline int core_vpu__spr_yoffs(struct core_vpu_sprite spr) {
+    int offs = (spr.b2 & VPU_SPR_YOFFSET);
     return (offs - 8) * 8;
 }
 
-static inline int core_vpu__spr_tile(struct core_vpu_sprite *spr) {
-    return spr->b3;
+static inline int core_vpu__spr_tile(struct core_vpu_sprite spr) {
+    return spr.b3;
 }
 
 
@@ -186,6 +186,7 @@ void core_vpu_update(struct core_vpu *vpu)
  *
  * Use this only for a speed-hack.
  */
+#if 0
 void core_vpu_write_fb(struct core_vpu *vpu)
 {
     int l, tx, ty, s, z;
@@ -256,7 +257,7 @@ void core_vpu_write_fb(struct core_vpu *vpu)
     memset(depth_num, 0, VPU_NUM_SPR_LAYERS * sizeof(int));
     /* First, sort them by depth/Z-index so they can be blitted in order. */
     for(s = 0; s < VPU_NUM_SPRITES; ++s) {
-        struct core_vpu_sprite *spr = (void *)&(*vpu->spr_ctl)[s * 4];
+        struct core_vpu_sprite spr = *(struct core_vpu_sprite *)&(*vpu->spr_ctl)[s * 4];
         if(!core_vpu__spr_enabled(spr))
             continue;
         //LOGV("core.vpu: detected enabled sprite #%d", s);
@@ -372,7 +373,7 @@ void core_vpu_write_fb(struct core_vpu *vpu)
     /* The framebuffer is now ready for use by the UI thread. */
     ui_unlock_fb();
 }
-
+#endif
 
 /* 
  * Re-entrant function for VPU emulation.
@@ -416,7 +417,7 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                 if (!core_vpu__get_l1t(vpu, scanline, c))
                     out = core_vpu__get_l1px(vpu, scanline, c);
                 for(i = 0; i < VPU_NUM_SPRITES; ++i) {
-                    struct core_vpu_sprite *spr = (void *)&(*vpu->spr_ctl)[i*4];
+                    struct core_vpu_sprite spr = *(struct core_vpu_sprite *)&(*vpu->spr_ctl)[i*4];
                     if (!core_vpu__spr_enabled(spr))
                         continue;
                     int hdouble = core_vpu__spr_hdouble(spr);
@@ -514,12 +515,13 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
                  (*vpu->layer2_tm)[(y >> 3)*VPU_TILE_XRES_FULL + ((a - 64) >> 2)]));
     } else if(a < 256) {
         unsigned int ac = a - 128;
-        unsigned int cs = ac / 2;                       // Current sprite
-        int vd = (*vpu->spr_ctl)[cs*4] & VPU_SPR_VDOUBLE;
-        unsigned int sg = (*vpu->spr_ctl)[cs*4 + 1];    // Sprite group
-        unsigned int gy0 = (*vpu->grp_pos)[sg*2 + 1];   // Group start y
-        unsigned int sy0 = gy0 + (((*vpu->spr_ctl)[cs*4 + 2] & 0x0f) - 8)*8; // Sprite start y
-        unsigned int csy = (y - sy0) >> vd;             // Current sprite y
+        unsigned int cs = ac / 2;                           // Current sprite
+        struct core_vpu_sprite spr = *(struct core_vpu_sprite *)&(*vpu->spr_ctl)[cs * 4];
+        int vd = core_vpu__spr_vdouble(spr);
+        unsigned int sg = core_vpu__spr_group(spr);         // Sprite group
+        unsigned int gy0 = (*vpu->grp_pos)[sg*2 + 1];       // Group start y
+        unsigned int sy0 = gy0 + core_vpu__spr_yoffs(spr);  // Sprite start y
+        unsigned int csy = (y - sy0) >> vd;                 // Current sprite y
         /* At cycle 128, read back last read request for layer 2. */
         if(a == 128)
             *(uint16_t *)&vpu->sl__l2data_w[63 * 2] = core_mmu_rw_fetch_vpu(vpu->mmu);
@@ -529,7 +531,7 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
          * - i = (scanline - 12) / (8/2) */
         core_mmu_rw_send_vpu(vpu->mmu,
                  VPU_A_TILE_BANK +                          // Tile bank base
-                 ((*vpu->spr_ctl)[cs*4 + 3] * VPU_TILE_SZ) +  // Offset to sprite tile
+                 (core_vpu__spr_tile(spr) * VPU_TILE_SZ) +  // Offset to sprite tile
                  (csy * 4) +                                // Offset due to scanline
                  ((a % 2) * 2));                            // Offset due to sl. cycle
     } else if(a == 256) {
