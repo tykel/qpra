@@ -39,7 +39,9 @@ void *core_entry(void *data)
 {
     struct core_system *core;
     struct core_temp_banks banks;
-    struct timespec tslf;
+    struct timespec ts0, ts1, ts_sleep;
+    unsigned int frame = 0;
+    intmax_t us, us_sum = 0;
     int cycles = 0;
 
     struct arg_pair *pair = (struct arg_pair *)data;
@@ -60,13 +62,10 @@ void *core_entry(void *data)
         LOGE("System initialization failed; exiting");
         return NULL;
     }
-    
-    clock_gettime(CLOCK_MONOTONIC_RAW, &tslf);
 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts0);
     LOGD("Beginning emulation");
     while(!done()) {
-        //core_vpu_update(core->vpu);
-        //core_vpu_write_fb(core->vpu);
         uint16_t pc = core->cpu->r[R_P];
         core->cpu->i_cycles = 0;
         core->cpu->i_done = 0;
@@ -87,36 +86,33 @@ void *core_entry(void *data)
 
         LOGV("core.cpu: %04x: %s (%d cycles)",
              pc, instrnam[INSTR_OP(core->cpu->i)], core->cpu->i_cycles);
-        //core_vpu_begin_vblank(core->vpu);
-        //for(int i = 0; i < CORE_CYCLES_VBLANK; ++i) {
-        //    core_cpu_i_instr(core->cpu);
-        //}
-        //core_vpu_end_vblank(core->vpu);
 #ifdef _DEBUG
         getc(stdin);
 #else
+        
         /* One frame's worth of cycles have been executed, so time to pause. */
         if(cycles >= CORE_CYCLES_F) {
-            struct timespec ts, ts_sleep;
-            static unsigned int frame = 0;
-            unsigned long int ns = 0;
 
-            clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-            ns = (ts.tv_sec - tslf.tv_sec) * 1000000000;
-            ns += (ts.tv_nsec - tslf.tv_nsec);
+            clock_gettime(CLOCK_MONOTONIC_RAW, &ts1);
+            us = (ts1.tv_sec * 1000000 + ts1.tv_nsec / 1000) -
+                 (ts0.tv_sec * 1000000 + ts0.tv_nsec / 1000);
+            us_sum += us;
+        
+            LOGV("  frame: % 3d.%03d ms", us / 1000, us % 1000);
+            if(++frame == 60) {
+                us_sum /= 60;
+                LOGD("frame avg: % 3d.%03d ms", us_sum / 1000, us_sum % 1000);
+                us_sum = frame = 0;
+            }
 
-            if(frame++ % 30 == 0)
-                LOGD("frame: % 3d.%03dms", ns/1000000, (ns%1000000)/1000);
-
-            if(ns < 16666666) {
+            if(us < 16666) {
                 ts_sleep.tv_sec = 0;
-                ts_sleep.tv_nsec = 16666666 - ns;
+                ts_sleep.tv_nsec = 16666666 - (us * 1000);
                 LOGV("sleeping %d ns", ts_sleep.tv_nsec);
                 nanosleep(&ts_sleep, NULL);
             }
-
-            clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-            tslf = ts;
+            
+            clock_gettime(CLOCK_MONOTONIC_RAW, &ts0);
             cycles = 0;
         }
 #endif
