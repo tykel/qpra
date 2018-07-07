@@ -21,6 +21,8 @@ int done();
 
 int texname;
 
+static int scale = 3;
+
 void ui_init_gtk(int argc, char **argv)
 {
     int i, j;
@@ -47,7 +49,7 @@ void ui_init_gtk(int argc, char **argv)
 struct ui_window * ui_window_new_gtk(void)
 {
     GtkWidget *menubar, *filemenu, *file, *open, *close, *quit;
-    GtkWidget *optmenu, *options, *emusettings;
+    GtkWidget *optmenu, *options, *emusettings, *scale2x, *scale3x;
     GtkWidget *helpmenu, *help, *doc, *about;
     GtkWidget *box;
     int attributes[] = {
@@ -77,6 +79,8 @@ struct ui_window * ui_window_new_gtk(void)
     optmenu = gtk_menu_new();
     options = gtk_menu_item_new_with_label("Options");
     emusettings = gtk_menu_item_new_with_label("Emulation settings");
+    scale2x = gtk_menu_item_new_with_label("Scale 2X");
+    scale3x = gtk_menu_item_new_with_label("Scale 3X");
     /* Create Help menu and items. */
     helpmenu = gtk_menu_new();
     help = gtk_menu_item_new_with_label("Help");
@@ -92,6 +96,8 @@ struct ui_window * ui_window_new_gtk(void)
     /* Add Options menu to menu bar. */
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(options), optmenu);
     gtk_menu_shell_append(GTK_MENU_SHELL(optmenu), emusettings);
+    gtk_menu_shell_append(GTK_MENU_SHELL(optmenu), scale2x);
+    gtk_menu_shell_append(GTK_MENU_SHELL(optmenu), scale3x);
     gtk_menu_shell_append(GTK_MENU_SHELL(menubar), options);
     /* Add Help menu to menu bar. */
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(help), helpmenu);
@@ -118,6 +124,10 @@ struct ui_window * ui_window_new_gtk(void)
             G_CALLBACK(ui_gtk_quit_destroy), NULL);
     g_signal_connect(G_OBJECT(quit), "activate",
             G_CALLBACK(ui_gtk_quit), NULL);
+    g_signal_connect(G_OBJECT(scale2x), "activate",
+            G_CALLBACK(ui_gtk_scale2x), NULL);
+    g_signal_connect(G_OBJECT(scale3x), "activate",
+            G_CALLBACK(ui_gtk_scale3x), NULL);
     g_signal_connect(window->area, "configure_event",
             G_CALLBACK(gtk_area_configure), window->window);
     g_signal_connect(window->area, "realize",
@@ -162,6 +172,18 @@ static void ui_gtk_quit(void)
     mark_done();
 }
 
+static void ui_gtk_scale2x(void)
+{
+    scale = 2;
+    gtk_widget_set_size_request(window->area, 256 * scale, 224 * scale);
+}
+
+static void ui_gtk_scale3x(void)
+{
+    scale = 3;
+    gtk_widget_set_size_request(window->area, 256 * scale, 224 * scale);
+}
+
 static void ui_gtk_quit_destroy(void)
 {
     if(!done())
@@ -193,7 +215,7 @@ static void ui_draw_opengl(void)
     glClear(GL_COLOR_BUFFER_BIT);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0, 768, 0, 672, -1, 1); //512, 0, 448, -1, 1);
+    glOrtho(0, 256 * scale, 0, 224 * scale, -1, 1);
     glEnable(GL_TEXTURE_2D);
     pthread_mutex_lock(&fb_lock);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 224, GL_RGBA,
@@ -201,13 +223,13 @@ static void ui_draw_opengl(void)
     pthread_mutex_unlock(&fb_lock);
     glBegin(GL_TRIANGLE_STRIP);
         glTexCoord2f(1.0, 0.0);
-        glVertex2i(768, 672); //448);
+        glVertex2i(256 * scale, 224 * scale);
         glTexCoord2f(0.0, 0.0);
-        glVertex2i(0, 672); //512, 448);
+        glVertex2i(0, 224 * scale);
         glTexCoord2f(1.0, 1.0);
-        glVertex2i(768, 0);
+        glVertex2i(256 * scale, 0);
         glTexCoord2f(0.0, 1.0);
-        glVertex2i(0, 0); //512, 0);
+        glVertex2i(0, 0);
     glEnd();
 }
 
