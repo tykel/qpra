@@ -16,6 +16,8 @@ struct ui_window * ui_window_new_gtk(void);
 static void ui_draw_init(void);
 static void ui_draw_opengl(void);
 static void ui_gtk_quit(void);
+static void ui_gtk_scale2x(void);
+static void ui_gtk_scale3x(void);
 static void ui_gtk_quit_destroy(void);
 static int gtk_area_start(GtkWidget *, void *);
 static int gtk_area_configure(GtkWidget *, GdkEventConfigure *, void *);
