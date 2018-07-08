@@ -9,31 +9,50 @@ init:       mv a, v_handler0    ; load the initial video IRQ handler address
 
 loop:       jp loop             ; loop until the video IRQ
 
-v_handler0: mv a, $84           ; set Enable bit and H-Double bit
+v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             mv.b [$ea00], a     ; update sprite 0 reg.
-            mv a, $81           ; set Enable bit and H-Double bit
             mv.b [$ea04], a     ; update sprite 1 reg.
+            mv.b [$ea08], a     ; update sprite 2 reg.
+            mv.b [$ea0c], a     ; update sprite 3 reg.
             mv a, $00           ; set sprite group to 0
             mv.b [$ea01], a     ; update sprite 0 reg.
-            mv a, $01           ; set sprite group to 1
             mv.b [$ea05], a     ; update sprite 1 reg.
-            mv a, $89           ; set x and y sprite group offsets to 0
-            mv.b [$ea02], a     ; update sprite 0 reg.
+            mv.b [$ea09], a     ; update sprite 2 reg.
+            mv.b [$ea0d], a     ; update sprite 3 reg.
             mv a, $88           ; set x and y sprite group offsets to 0
+            mv.b [$ea02], a     ; update sprite 0 reg.
+            mv a, $a8           ; set x and y sprite group offsets to 0
             mv.b [$ea06], a     ; update sprite 1 reg.
+            mv a, $8a           ; set x and y sprite group offsets to 0
+            mv.b [$ea0a], a     ; update sprite 2 reg.
+            mv a, $aa           ; set x and y sprite group offsets to 0
+            mv.b [$ea0e], a     ; update sprite 3 reg.
             mv a, $01           ; tile index 1
             mv.b [$ea03], a     ; update sprite 0 reg.
+            mv a, $02           ; tile index 2
             mv.b [$ea07], a     ; update sprite 1 reg.
+            mv a, $03           ; tile index 3
+            mv.b [$ea0b], a     ; update sprite 2 reg.
+            mv a, $04           ; tile index 4
+            mv.b [$ea0f], a     ; update sprite 3 reg.
+            
             mv a, 0             ; use palette 0
+            mv [$eb40], a       ; update layer 1/2 palette reg.
             mv [$eb81], a       ; update sprite palette reg.
-            mv a, $7000         ; y = 96
+            mv a, $7020         ; y = 96
             mv [$eb00], a       ; update group 0 pos.
-            mv a, $0010         ; x = 16
-            mv [$eb02], a       ; update group 1 pos.
-            mv a, $03           ; random color
+            mv a, $b4           ; grey
             mv.b [$e900], a     ; update palette 0, entry 0
-            mv a, $89           ; color 'white' in global palette
+            mv a, $00           ; black
             mv.b [$e901], a     ; update palette 0, entry 1
+            mv a, $46           ; light green
+            mv.b [$e902], a     ; update palette 0, entry 2
+            mv a, $43           ; dark green
+            mv.b [$e903], a     ; update palette 0, entry 3
+            mv a, $27           ; red
+            mv.b [$e904], a     ; update palette 0, entry 4
+            mv a, $dd           ; white
+            mv.b [$e90f], a     ; update palette 0, entry f
             mv a, v_handler1    ; load the "real" video IRQ handler address
             mv [$fffa], a       ; store it in the interrupt vector
             rti
@@ -45,21 +64,17 @@ v_handler1: inc c
             mv d, c
             add d, sin_lut
             mv.b d, [d]
-            lsl d, 1
-            add d, 48
+            add d, 24 
             mv e, c
             add e, 64
             and e, 255
             add e, sin_lut
             mv e, [e]
-            add e, 32
-            lsl e, 9
+            add e, 24
+            lsl e, 8
             or d, e
-            mv [$eb02], d       ; update group 0 pos.
-            mv d, c
-            lsr d, 4
-            add d, $80
-            mv.b [$ea02], d
+            lsl d, 1
+            mv [$eb00], d       ; update group 0 pos.
             rti
 
 ;------------------------------------------------------------------------------
@@ -132,15 +147,55 @@ sin_lut:
 ;------------------------------------------------------------------------------
 .bank tile_swap 0
 
-.db $00,$00,$00,$00,
-.db $00,$00,$01,$00,
-.db $01,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$01,
+; 0 Background tile
 .db $00,$00,$00,$00,
 .db $00,$00,$00,$00,
-.db $00,$10,$00,$00,
+.db $0f,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$0f,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$f0,$00,$00,
 
+; Player tiles
+; 1 Top left
+.db $00,$00,$00,$01,
+.db $00,$00,$00,$11,
+.db $00,$00,$00,$11,
+.db $00,$00,$00,$1f,
+.db $00,$00,$11,$13,
+.db $00,$01,$22,$22,
+.db $00,$01,$23,$22,
+.db $00,$12,$23,$32,
+; 2 Top right
+.db $10,$00,$00,$00,
+.db $11,$00,$00,$00,
+.db $f1,$00,$00,$00,
+.db $f1,$00,$00,$00,
+.db $33,$11,$00,$00,
+.db $22,$22,$10,$00,
+.db $22,$23,$10,$00,
+.db $22,$13,$31,$00,
+; 3 Bottom left
+.db $00,$12,$11,$32,
+.db $00,$14,$11,$11,
+.db $00,$1f,$11,$44,
+.db $00,$11,$11,$44,
+.db $00,$00,$01,$f1,
+.db $00,$00,$01,$41,
+.db $00,$00,$01,$f1,
+.db $00,$00,$01,$11,
+; 4 Bottom right
+.db $22,$11,$31,$00,
+.db $11,$11,$41,$00,
+.db $44,$41,$f1,$00,
+.db $11,$41,$11,$00,
+.db $14,$f1,$00,$00,
+.db $14,$10,$00,$00,
+.db $1f,$10,$00,$00,
+.db $11,$11,$00,$00,
+
+; Test tiles
 .db $01,$11,$11,$10,
 .db $11,$11,$11,$11,
 .db $11,$01,$10,$11,
