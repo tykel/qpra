@@ -76,10 +76,8 @@ static inline int core_vpu__spr_tile(struct core_vpu_sprite spr) {
 
 static void core_vpu__fetch_data(struct core_vpu *, int, int);
 static struct rgba core_vpu__get_l2px(struct core_vpu *, int, int);
-static struct rgba core_vpu__get_l1px(struct core_vpu *, int, int);
-static struct rgba core_vpu__get_spx(struct core_vpu *, int, int, int);
-static int core_vpu__get_l1t(struct core_vpu *vpu, int, int);
-static int core_vpu__get_st(struct core_vpu *vpu, int, int, int);
+static struct rgba core_vpu__get_l1px(struct core_vpu *, int, int, struct rgba);
+static struct rgba core_vpu__get_spx(struct core_vpu *, int, int, int, struct rgba);
 static void core_vpu__write_px(struct core_vpu *, int, int, struct rgba);
 
 /* 
@@ -157,6 +155,7 @@ int core_vpu_init_palette(struct core_vpu *vpu, uint8_t *palette)
         pal_fixed[i].r = *p++;
         pal_fixed[i].g = *p++;
         pal_fixed[i].b = *p++;
+        LOGV("palette entry %02x: %02x %02x %02x", i, pal_fixed[i].r, pal_fixed[i].g, pal_fixed[i].b);
         pal_fixed[i].a = 255; 
     }
 
@@ -414,8 +413,7 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                 /* Get RGB and transparency data for each layer and sprite's
                  * pixel. */
                 out = core_vpu__get_l2px(vpu, scanline, c);
-                if (!core_vpu__get_l1t(vpu, scanline, c))
-                    out = core_vpu__get_l1px(vpu, scanline, c);
+                out = core_vpu__get_l1px(vpu, scanline, c, out);
                 for(i = 0; i < VPU_NUM_SPRITES; ++i) {
                     struct core_vpu_sprite spr = *(struct core_vpu_sprite *)&(*vpu->spr_ctl)[i*4];
                     if (!core_vpu__spr_enabled(spr))
@@ -431,8 +429,7 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
                        (x < endx) &&
                        ((scanline-16) >= starty) &&
                        ((scanline-16) < endy)) {
-                        if (!core_vpu__get_st(vpu, scanline, c, i))
-                            out = core_vpu__get_spx(vpu, scanline, c, i);
+                        out = core_vpu__get_spx(vpu, scanline, c, i, out);
                     }
                 }
     
@@ -550,71 +547,39 @@ static struct rgba core_vpu__get_l2px(struct core_vpu *vpu, int scanline, int c)
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
     return pal_fixed[(*vpu->pals)[e]];
-    //return vpu->sl__l2pal[e];
 }
 
 
 /* Return layer 1's tilemap pixel at the current scanline and cycle. */
-static struct rgba core_vpu__get_l1px(struct core_vpu *vpu, int scanline, int c)
+static struct rgba core_vpu__get_l1px(struct core_vpu *vpu, int scanline, int c,
+                                      struct rgba below)
 {
     int x = (c - 65) & 255;
     int tx = x / 2;
     uint8_t e = vpu->sl__l1data_r[tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
-    return pal_fixed[(*vpu->pals)[e]];
-    //return vpu->sl__l1pal[e];
+    return e ? pal_fixed[(*vpu->pals)[e]] : below;
 }
 
 
 /* Return sprite i's pixel at the current scanline and cycle. */
 static struct rgba core_vpu__get_spx(struct core_vpu *vpu, int scanline, int c,
-                                    int i)
+                                    int i, struct rgba below)
 {
     struct rgba dummy = { 0 };
     int x = (c - 65) & 255;
     uint8_t grp = (*vpu->spr_ctl)[i*4 + 1];
-    int tx = (x - (*vpu->grp_pos)[grp*2]) / 2;
+    int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
+    int spx = (*vpu->grp_pos)[grp*2] + (((*vpu->spr_ctl)[i*4 + 2] >> 4) - 8)*8;
+    int tx = (x - spx) >> (1 + h2);
     if(tx < 0)
         return dummy;
-    int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
-    uint8_t e = vpu->sl__sdata_r[i*4 + (tx >> h2)];
-    int lp = h2 ? !(x & 2) : (c & 1);
+    uint8_t e = vpu->sl__sdata_r[i*4 + tx];
+    int lp = h2 ? !((x - spx) & 2) : (c & 1);
     e = lp ? (e >> 4) : (e & 0xf);
 
-    return pal_fixed[(*vpu->pals)[e]];
-    //return vpu->sl__spal[e];
-}
-
-
-/* Return whether layer 1's tilemap pixel at the current scanline and cycle is
- * transparent. */
-static int core_vpu__get_l1t(struct core_vpu *vpu, int scanline, int c)
-{
-    int x = (c - 65) & 255;
-    int tx = x / 2;
-    uint8_t e = vpu->sl__l1data_r[tx];
-    e = (c & 1) ? (e >> 4) : (e & 0xf);
-
-    return !e;
-}
-
-
-/* Return whether sprite i's pixel at the current scanline and cycle is
- * transparent. */
-static int core_vpu__get_st(struct core_vpu *vpu, int scanline, int c, int i)
-{
-    int x = (c - 65) & 255;
-    uint8_t grp = (*vpu->spr_ctl)[i*4 + 1];
-    int tx = (x - (*vpu->grp_pos)[grp*2]) / 2;
-    if(tx < 0)
-        return 1;
-    int h2 = !!((*vpu->spr_ctl)[i*4] & VPU_SPR_HDOUBLE);
-    uint8_t e = vpu->sl__sdata_r[i*4 + (tx >> h2)];
-    int lp = h2 ? !(x & 2) : (c & 1);
-    e = lp ? (e >> 4) : (e & 0xf);
-
-    return !e;
+    return e ? pal_fixed[(*vpu->pals)[e]] : below;
 }
 
 
