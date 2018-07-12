@@ -70,7 +70,7 @@ void *core_entry(void *data)
         core->cpu->i_cycles = 0;
         core->cpu->i_done = 0;
         core->cpu->i_middle = 0;
-
+        
         do {
             /* Apply any pending read/write requests on the bus. */
             core_mmu_update(core->cpu->mmu);
@@ -80,12 +80,11 @@ void *core_entry(void *data)
             core_cpu_i_cycle(core->cpu);
             LOGV("core.cpu: ... cycle %d", core->cpu->i_cycles);
 
-            //core->cpu->i_middle = 0;
             cycles += 1;
         } while(!core->cpu->i_done);
 
-        LOGV("core.cpu: %04x: %s (%d cycles)",
-             pc, instrnam[INSTR_OP(core->cpu->i)], core->cpu->i_cycles);
+        LOGV("core.cpu: %04x: %s (%d cycles) (p now %04x)",
+             pc, instrnam[INSTR_OP(core->cpu->i)], core->cpu->i_cycles, core->cpu->r[R_P]);
 #ifdef _DEBUG
         getc(stdin);
 #else

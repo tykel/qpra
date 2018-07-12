@@ -391,6 +391,8 @@ void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
     /* First, update state if necessary. */
     core_vpu_update(vpu);
 
+    vpu->hsync = (c < 25);
+
     if(scanline == 12 && c == 0)
         core_vpu_end_vblank(vpu);
 
@@ -618,7 +620,7 @@ void core_vpu_end_vblank(struct core_vpu *vpu)
 
 uint8_t core_vpu_readb(struct core_vpu *vpu, uint16_t a)
 {
-    if(!vpu->vblank) {
+    if(!vpu->vblank && !vpu->hsync) {
         LOGV("core.vpu: read denied: vblank = 0");
         return 0;
     }
@@ -630,7 +632,7 @@ uint8_t core_vpu_readb(struct core_vpu *vpu, uint16_t a)
 
 void core_vpu_writeb(struct core_vpu *vpu, uint16_t a, uint8_t v)
 {
-    if(!vpu->vblank) {
+    if(!vpu->vblank && !vpu->hsync) {
         LOGV("core.vpu: write denied: vblank = 0");
         return;
     }

@@ -1,5 +1,6 @@
 CC=gcc
-CFLAGS=-Og -D_POSIX_C_SOURCE=199309L -std=c99 -I./src -DLOG_LEVEL=1 #-D_DEBUG_MEMORY -D_DEBUG
+CFLAGS=-Og -g -std=c11 -I./src -DLOG_LEVEL=1 #-D_DEBUG_MEMORY -D_DEBUG
+#CFLAGS=-O3 -ffast-math -ftree-vectorize -std=c11 -I./src -DLOG_LEVEL=1 #-D_DEBUG_MEMORY -D_DEBUG
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 

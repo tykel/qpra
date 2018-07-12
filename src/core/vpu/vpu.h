@@ -91,6 +91,8 @@ struct core_vpu {
 
     /* VBlank status flag. */
     int vblank;
+    /* HSync status flag. */
+    int hsync;
 
     /* Switchable tile bank. */
     uint8_t *tile_bank;

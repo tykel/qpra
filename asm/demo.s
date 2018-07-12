@@ -4,12 +4,19 @@
 
 init:       mv a, v_handler0    ; load the initial video IRQ handler address
             mv [$fffa], a       ; store it in the interrupt vector
+            ;mv a, t_handler     ; load the timer IRQ handler address
+            ;mv [$fffc], a
+            ;mv a, $03           ; enable HRC and set to HSync timing
+            ;mv [$ffe2], a
+            ;mv a, 0
+            ;mv [$8000], a
             mv c, 0
             mv d, 0
 
 loop:       jp loop             ; loop until the video IRQ
 
-v_handler0: mv a, $85           ; set Enable bit and H-Double bit
+.db $77,$77,$77,$77
+v_handler0: mv a, $80           ; set Enable bit and H-Double bit
             mv.b [$ea00], a     ; update sprite 0 reg.
             mv.b [$ea04], a     ; update sprite 1 reg.
             mv.b [$ea08], a     ; update sprite 2 reg.
@@ -21,11 +28,11 @@ v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             mv.b [$ea0d], a     ; update sprite 3 reg.
             mv a, $88           ; set x and y sprite group offsets to 0
             mv.b [$ea02], a     ; update sprite 0 reg.
-            mv a, $a8           ; set x and y sprite group offsets to 0
+            mv a, $98           ; set x and y sprite group offsets to 0
             mv.b [$ea06], a     ; update sprite 1 reg.
-            mv a, $8a           ; set x and y sprite group offsets to 0
+            mv a, $89           ; set x and y sprite group offsets to 0
             mv.b [$ea0a], a     ; update sprite 2 reg.
-            mv a, $aa           ; set x and y sprite group offsets to 0
+            mv a, $99           ; set x and y sprite group offsets to 0
             mv.b [$ea0e], a     ; update sprite 3 reg.
             mv a, $01           ; tile index 1
             mv.b [$ea03], a     ; update sprite 0 reg.
@@ -41,7 +48,7 @@ v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             mv [$eb81], a       ; update sprite palette reg.
             mv a, $7020         ; y = 96
             mv [$eb00], a       ; update group 0 pos.
-            mv a, $b4           ; grey
+            mv a, $00           ; black
             mv.b [$e900], a     ; update palette 0, entry 0
             mv a, $00           ; black
             mv.b [$e901], a     ; update palette 0, entry 1
@@ -51,13 +58,45 @@ v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             mv.b [$e903], a     ; update palette 0, entry 3
             mv a, $27           ; red
             mv.b [$e904], a     ; update palette 0, entry 4
+            mv a, $23           ; grey 
+            mv.b [$e90e], a     ; update palette 0, entry e
             mv a, $dd           ; white
             mv.b [$e90f], a     ; update palette 0, entry f
             mv a, v_handler1    ; load the "real" video IRQ handler address
             mv [$fffa], a       ; store it in the interrupt vector
             rti
 
+t_handler:  cl [t_h_isc]
+            cmp a, 0
+            jz [t_handlerZ]       ; Only operate on visible scanlines (0-256)
+            mv a, [$8000]
+            and a, $40
+            jz [t_handlerZ]       ; Only operate every 64 scanlines
+            mv a, [$e900]
+            add a, 64
+            mv [$e900], a
+t_handlerZ: rti
+
+t_h_isc:    mv b, 1             ; Inc./wrap scanline counter. Return 1 if vis.
+            mv a, [$8000]
+            add a, 1
+            cmp a, 256
+            jn [t_h_isc2]
+t_h_isc1:   mv b, 0
+t_h_isc2:   cmp a, 262
+            jn [t_h_iscZ]
+            mv a, 0
+t_h_iscZ:   mv [$8000], a
+            mv a, b
+            rts
+
 v_handler2: rti
+            nop
+            nop
+            xor a,a
+            nop
+
+.db $44,$44,$44,$44
 
 v_handler1: inc c
             and c, 255
@@ -74,7 +113,7 @@ v_handler1: inc c
             lsl e, 8
             or d, e
             lsl d, 1
-            mv [$eb00], d       ; update group 0 pos.
+zzzz:       mv [$eb00], d       ; update group 0 pos.
             rti
 
 ;------------------------------------------------------------------------------
@@ -150,12 +189,12 @@ sin_lut:
 ; 0 Background tile
 .db $00,$00,$00,$00,
 .db $00,$00,$00,$00,
-.db $0f,$00,$00,$00,
+.db $0e,$00,$00,$00,
 .db $00,$00,$00,$00,
-.db $00,$00,$00,$0f,
+.db $00,$00,$00,$0e,
 .db $00,$00,$00,$00,
 .db $00,$00,$00,$00,
-.db $00,$f0,$00,$00,
+.db $00,$e0,$00,$00,
 
 ; Player tiles
 ; 1 Top left

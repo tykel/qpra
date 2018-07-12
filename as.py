@@ -64,8 +64,9 @@ rr = ["a","b","c","d","e","f"]
 
 regs = { 'a':0, 'b':1, 'c':2, 'd':3, 'e':4, 'f':5, 'p':6, 's':7 }
 
-def getAddrMode(nops, op1, op2, ds):
-    #print 'getAddrMode: ', nops, ': ', op1, ', ', op2, ' -- ', ds
+def getAddrMode(nops, op1, op2, ds, p):
+    #if op1 == "[t_h_isc]":
+    #    print 'getAddrMode: ', nops, ': ', op1, ', ', op2, ' -- ', ds
     if nops == 0:
         return 0
     if nops == 1:
@@ -84,12 +85,12 @@ def getAddrMode(nops, op1, op2, ds):
             else:
                 return 4
         elif re.match("\[(\$[abcdef0-9]{1,2}?)|(\d{1,3}?)\]", op1) is not None:
-            if num(op1) < 256:
+            if -128 < (num(op1) - p) < 127:
                 return 3
             else:
                 return 5
-        elif re.match("\[\w+\]", op1) is not None and op1 in ds:
-            if num(ds[op1]) < 256:
+        elif re.match("\[\w+\]", op1) is not None and op1[1:-1] in ds:
+            if -128 < (num(ds[op1[1:-1]]) - p) < 127:
                 return 3
             else:
                 return 5
@@ -117,8 +118,8 @@ def getAddrMode(nops, op1, op2, ds):
                     return 10
                 else:
                     return 12
-            elif re.match("\[\w+\]", op2) is not None and op2 in ds:
-                if num(ds[op2]) < 256:
+            elif re.match("\[\w+\]", op2) is not None and op2[1:-1] in ds:
+                if num(ds[op2[1:-1]]) < 256:
                     return 10
                 else:
                     return 12
@@ -137,8 +138,8 @@ def getAddrMode(nops, op1, op2, ds):
                     return 13
                 else:
                     return 14
-            elif re.match("\[\w+\]", op1) is not None and op1 in ds:
-                if num(ds[op1]) < 256:
+            elif re.match("\[\w+\]", op1) is not None and op1[1:-1] in ds:
+                if num(ds[op1[1:-1]]) < 256:
                     return 13
                 else:
                     return 14
@@ -162,7 +163,7 @@ def num(s):
 
 
 class instr:
-    def __init__(self, strop, op, nops, op1="", op2=""):
+    def __init__(self, strop, op, nops, op1="", op2="", addr=0):
         self.strop = strop
         self.op = op
         self.nops = nops
@@ -171,13 +172,15 @@ class instr:
         if nops > 1:
             self.op2 = op2
 
+        self.mode = getAddrMode(nops, op1, op2, defs, addr)
+
         if strop in ["nop", "int", "rti", "rts"]:
             self.size = 1
         elif nops == 1 and self.op1 in rr:
             self.size = 2
         elif nops == 2 and self.op1 in rr and self.op2 in rr:
             self.size = 2
-        elif getAddrMode(nops, op1, op2, defs) in [2,3,9,10,13]:
+        elif self.mode in [2,3,9,10,13]:
             self.size = 3
         else:
             self.size = 4
@@ -190,6 +193,7 @@ class instr:
     addr = 0
     size = 0
     w = 1
+    mode = 0
 
     isdata = 0
     strdata = []
@@ -215,11 +219,45 @@ def main():
         result = argx.match(line)
         if result is not None:
             if result.group(1) is not None:
-                print 'Found label ', result.group(1)[:-1]
+                #print 'Found label ', result.group(1)[:-1]
                 defs[result.group(1)[:-1]] = 0
-    f.close()
 
-    f = open(sys.argv[1], "r")
+    f.seek(0)
+
+    # First match all labels so symbol table is set up
+    for line in f:
+        # Handle instructions
+        result = irgx.match(line)
+        if result is not None:
+            o = opcodes[result.group(2)]
+            iii = None
+            if o is None:
+                print 'error: \'', result.group(2), '\' is not a valid opcode'
+                continue
+            if not result.group(5):
+                if not result.group(4):
+                    iii = instr(result.group(2), o, 0, org)
+                else:
+                    iii = instr(result.group(2), o, 1, result.group(4), org)
+            else:
+                iii = instr(result.group(2), o, 2, result.group(4), result.group(5), org)
+            if result.group(1) is not None:
+                defs[result.group(1)[:-1]] = org
+            org += iii.size
+            continue
+
+        # Handle singleton labels
+        result = argx.match(line)
+        if result is not None:
+            if result.group(1) is not None:
+                defs[result.group(1)[:-1]] = org
+
+    print 'Found following labels:'
+    for ddd in defs:
+        print '\t', ddd, ':', hex(defs[ddd])
+
+    f.seek(0)
+    org = 0
     for line in f:
         # Handle directives
         result = drgx.match(line)
@@ -236,9 +274,8 @@ def main():
                 continue
             # Data byte directive
             elif d == 1:
-                db = instr(result.group(1), d, 0)
+                db = instr(result.group(1), d, 0, org)
                 db.isdata = 1
-                db.addr = org
                 db.strdata = list()
                 for i in xrange(2,6):
                     if result.group(i) is not None:
@@ -262,25 +299,16 @@ def main():
                 continue
             if not result.group(5):
                 if not result.group(4):
-                    iii = instr(result.group(2), o, 0)
+                    iii = instr(result.group(2), o, 0, org)
                 else:
-                    iii = instr(result.group(2), o, 1, result.group(4))
+                    iii = instr(result.group(2), o, 1, result.group(4), org)
             else:
-                iii = instr(result.group(2), o, 2, result.group(4), result.group(5))
+                iii = instr(result.group(2), o, 2, result.group(4), result.group(5), org)
             if result.group(3) is not None:
                 iii.w = 1 if result.group(3) == '.w' else 0
-            iii.addr = org
             il[b].append(iii)
-            if result.group(1) is not None:
-                defs[result.group(1)[:-1]] = org
             org += iii.size
             continue
-
-        # Handle singleton labels
-        result = argx.match(line)
-        if result is not None:
-            if result.group(1) is not None:
-                defs[result.group(1)[:-1]] = org
 
     f.close()
 
@@ -332,7 +360,7 @@ def main():
             # Otherwise process the instruction normally
             op1 = 0
             op2 = 0
-            am = getAddrMode(i.nops, i.op1, i.op2, defs)
+            am = getAddrMode(i.nops, i.op1, i.op2, defs, i.addr+i.size)
             if am in [0,1,6,7,8,9,10,11,12]:
                 if i.op1 in rr:
                     op1 = regs[i.op1]
@@ -344,18 +372,20 @@ def main():
                 elif (len(i.op2) == 3 and i.op2[1] in rr):
                     op2 = regs[i.op2[1]]
             if am in [2,3,4,5,13,14] :
-                if i.op1 in defs:
-                    op1 = defs[i.op1]
+                opp = re.sub('[\[\]]', '', i.op1)
+                if opp in defs:
+                    op1 = defs[opp]
                 else:
-                    op1 = num(i.op1)
+                    op1 = num(opp)
                 if i.nops == 2:
                     op2 = regs[i.op2]
             elif am in [9,10,11,12] and type(i.op2) is str:
                 op1 = regs[i.op1]
-                if i.op2 in defs:
-                    op2 = defs[i.op2]
+                opp = re.sub('[\[\]]', '', i.op2)
+                if opp in defs:
+                    op2 = defs[opp]
                 else:
-                    op2 = num(i.op2)
+                    op2 = num(opp)
             b = (i.op << 3) | (i.w << 2) | (am >> 2)
             f.write(struct.pack('B', b))
             c += 1
@@ -405,9 +435,6 @@ def main():
     f.close()
 
     print 'Wrote', tc, 'bytes to', romname
-    print 'Found following labels:'
-    for ddd in defs:
-        print ddd, ':', hex(defs[ddd])
 
 if __name__ == "__main__":
     main()

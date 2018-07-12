@@ -151,11 +151,11 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
     if(cpu->interrupt != INT_NONE && (cpu->r[R_F] & FLAG_I) && !cpu->i_middle) {
         if(*c == 0) {
             cpu->r[R_S] -= 2;
-            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
+            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
             *c += 1;
         } else if(*c == 1) {
             cpu->r[R_S] -= 2;
-            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
+            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_F]);
             *c += 1;
         } else if(*c == 2) {
             switch(cpu->interrupt) {
@@ -178,6 +178,12 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
             cpu->interrupt = INT_NONE;
             *c = 0;
+            cpu->i_middle = 0;
+            LOGD("Video IRQ fired: next p @ $%04x", cpu->r[R_P]); 
+            if (cpu->r[R_P] == 0x0108) {
+                cpu->i_middle = 0;
+                return;
+            }
         }
         return;
     }
@@ -239,7 +245,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
                     core_mmu_rb_send_cpu(cpu->mmu, cpu->r[INSTR_RY(cpu->i)]);
             }
         } else {
-            LOGE("core.cpu: invalid state reached (cycle 2)");
+            LOGE("core.cpu: pc:%04x: invalid state reached (cycle 2)", p.p);
         }
 
     } else if(*c == 2) {
@@ -313,7 +319,7 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
                 cpu->i_done = 1;
             }
         } else {
-            LOGE("core.cpu: invalid state reached (cycle 3)");
+            LOGE("core.cpu: pc:%04x: invalid state reached (cycle 3)", p.p);
         }
 
     } else if(*c == 3) {
@@ -428,6 +434,7 @@ void core_cpu_i_instr(struct core_cpu *cpu)
 void core_cpu_i_op_nop(struct core_cpu *cpu, struct core_instr_params *p)
 {
     /* Literally a no-op... */
+    LOGD("nop");
 }
 
 /*
@@ -462,12 +469,12 @@ void core_cpu_i_op_rti(struct core_cpu *cpu, struct core_instr_params *p)
         core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
     } else if(cpu->i_cycles == 2) {
-        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
+        cpu->r[R_F] = core_mmu_rw_fetch_cpu(cpu->mmu);
         core_mmu_rw_send_cpu(cpu->mmu, cpu->r[R_S]);
         cpu->r[R_S] += 2;
         //cpu->interrupt = INT_NONE;
     } else {
-        cpu->r[R_F] = core_mmu_rw_fetch_cpu(cpu->mmu);
+        cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
     }
 }
 
@@ -498,10 +505,10 @@ void core_cpu_i__call(struct core_cpu *cpu,
                       struct core_instr_params *p,
                       int flag)
 {
-    if(cpu->i_cycles == p->start_cycle) {
+    if(cpu->i_cycles == 1) {
         if(p->f & flag || !flag) {
-            core_mmu_ww_send_cpu(cpu->mmu, p->s, p->p);
             cpu->r[R_S] -= 2;
+            core_mmu_ww_send_cpu(cpu->mmu, cpu->r[R_S], cpu->r[R_P]);
             cpu->r[R_P] = p->op1;
         }
 

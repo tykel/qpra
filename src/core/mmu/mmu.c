@@ -457,8 +457,11 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
         LOGV("core.mmu: read  @ address $%04x: gamepad stub", a);
     else if(a >= A_PAD2_REG && a <= A_PAD2_REG_END)
         LOGV("core.mmu: read  @ address $%04x: gamepad stub", a);
-    else if(a <= A_INT_VEC_END)
+    else if(a <= A_INT_VEC_END) {
+        LOGV("core.mmu: read @ address $%04x: $%02x (p: $%04x)", a,
+             mmu->intvec[a - A_INT_VEC], mmu->cpu->r[R_P]);
         return mmu->intvec[a - A_INT_VEC];
+    }
     else {
         LOGW("core.mmu: read  @ address $%04x: unhandled", a);
         return 0;
@@ -495,7 +498,7 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     else if(a <= A_CART_FIXED_END)
         mmu->cart_f[a - A_CART_FIXED] = v;
     else if(a <= A_FIXED1_END)
-        LOGW("core.mmu: write @ address $%04x: unhandled", a);
+        LOGW("core.mmu: write @ address $%04x: unhandled (p:$%04x)", a, mmu->cpu->r[R_P]);
     else if(a == A_ROM_BANK_SELECT)
         core_mmu_bank_select(mmu, B_ROM_SWAP, v);
     else if(a == A_RAM_BANK_SELECT)
@@ -506,10 +509,13 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
         core_cpu_hrc_sethib(mmu->cpu->hrc, v);
     else if(a <= A_SERIAL_REG_END)
         LOGV("core.mmu: write @ address $%04x: serial stub", a);
-    else if(a <= A_INT_VEC_END)
+    else if(a <= A_INT_VEC_END) {
+        LOGV("core.mmu: write @ address $%04x: $%02x (p:$%04x)", a, v,
+             mmu->cpu->r[R_P]);
         mmu->intvec[a - A_INT_VEC] = v;
+    }
     else {
-        LOGW("core.mmu: write @ address $%04x: unhandled", a);
+        LOGW("core.mmu: write @ address $%04x: unhandled (p:$%04x)", a, mmu->cpu->r[R_P]);
     }
 }
 
