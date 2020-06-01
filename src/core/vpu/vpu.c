@@ -16,8 +16,12 @@
 #include "log.h"
 
 #ifdef _DEBUG
+#ifndef _DEBUG_VPU
 #define _DEBUG_VPU
+#endif
+#ifndef _DEBUG_MEMORY
 #define _DEBUG_MEMORY
+#endif
 #endif
 
 struct rgba pal_fixed[VPU_FIX_PALETTE_SZ];
@@ -374,6 +378,18 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 }
 #endif
 
+static int scanline = 0;
+
+/*
+ * Debug function to begin vblank at an arbitrary time, by messing with the
+ * scanline and cycle counters.
+ */
+int core_vpu_debug_skip_to_vblank(struct core_vpu *vpu, int total_cycles)
+{
+   scanline = 240;
+   return (1 + total_cycles / VPU_XRES_CYCLES) * (VPU_XRES_CYCLES);
+}
+
 /* 
  * Re-entrant function for VPU emulation.
  *
@@ -385,7 +401,6 @@ void core_vpu_write_fb(struct core_vpu *vpu)
 void core_vpu_cycle(struct core_vpu *vpu, int total_cycles)
 {
     uint8_t *temp;
-    static int scanline = 0;
     int c = total_cycles % VPU_XRES_CYCLES;
 
     /* First, update state if necessary. */
@@ -498,7 +513,7 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
          * - y = (scanline - 12) / 8 (tiles are 8 scanlines tall)
          * - x = (c - 25) / (8/2) (tiles are 4 BYTES wide) */
         core_mmu_rw_send_vpu(vpu->mmu,
-                (VPU_A_TILE_BANK + (a % 2)*2 + (y % 8)*4 +
+                (VPU_A_TILE_BANK + (a % 2)*2 + ((y + *vpu->layer1_fsy) % 8)*4 +
                  (*vpu->layer1_tm)[(y >> 3)*VPU_TILE_XRES_FULL + (a >> 2)]));
     } else if(a < 128) {
         /* At cycle 64, read back last read request for layer 1. */
@@ -510,7 +525,7 @@ static void core_vpu__fetch_data(struct core_vpu *vpu, int scanline, int c)
          * - y = (scanline - 12) / 8 (tiles are 8 scanlines tall)
          * - x = (c - 25) / (8/2) (tiles are 4 BYTES wide) */
         core_mmu_rw_send_vpu(vpu->mmu,
-                (VPU_A_TILE_BANK + (a % 2)*2 + (y % 8)*4 +
+                (VPU_A_TILE_BANK + (a % 2)*2 + ((y + *vpu->layer2_fsy) % 8)*4 +
                  (*vpu->layer2_tm)[(y >> 3)*VPU_TILE_XRES_FULL + ((a - 64) >> 2)]));
     } else if(a < 256) {
         unsigned int ac = a - 128;
@@ -548,7 +563,8 @@ static struct rgba core_vpu__get_l2px(struct core_vpu *vpu, int scanline, int c)
     uint8_t e = vpu->sl__l2data_r[tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
-    return pal_fixed[(*vpu->pals)[e]];
+    uint8_t pal = (*vpu->layers_pi) >> 4;
+    return pal_fixed[(*vpu->pals)[pal*VPU_PALETTE_SZ + e]];
 }
 
 
@@ -557,11 +573,12 @@ static struct rgba core_vpu__get_l1px(struct core_vpu *vpu, int scanline, int c,
                                       struct rgba below)
 {
     int x = (c - 65) & 255;
-    int tx = x / 2;
+    int tx = (*vpu->layer1_fsx + x / 2) % (32*4);
     uint8_t e = vpu->sl__l1data_r[tx];
     e = (c & 1) ? (e >> 4) : (e & 0xf);
 
-    return e ? pal_fixed[(*vpu->pals)[e]] : below;
+    uint8_t pal = (*vpu->layers_pi) & 0xf;
+    return e ? pal_fixed[(*vpu->pals)[pal*VPU_PALETTE_SZ + e]] : below;
 }
 
 
@@ -578,10 +595,11 @@ static struct rgba core_vpu__get_spx(struct core_vpu *vpu, int scanline, int c,
     if(tx < 0)
         return dummy;
     uint8_t e = vpu->sl__sdata_r[i*4 + tx];
-    int lp = h2 ? !((x - spx) & 2) : (c & 1);
+    int lp = !(((x - spx) >> h2) & 1);
     e = lp ? (e >> 4) : (e & 0xf);
 
-    return e ? pal_fixed[(*vpu->pals)[e]] : below;
+    uint8_t pal = (*vpu->spr_pi);
+    return e ? pal_fixed[(*vpu->pals)[pal*VPU_PALETTE_SZ + e]] : below;
 }
 
 
@@ -605,7 +623,7 @@ void core_vpu_begin_vblank(struct core_vpu *vpu)
     vpu->vblank = 1;
     ui_lock_fb();
     {
-        void *uifb =  ui_get_fb();
+        void *uifb = ui_get_fb();
         memcpy(uifb, vpu->rgba_fb, VPU_XRES * VPU_YRES * 4);
     }
     ui_unlock_fb();   
@@ -633,11 +651,11 @@ uint8_t core_vpu_readb(struct core_vpu *vpu, uint16_t a)
 void core_vpu_writeb(struct core_vpu *vpu, uint16_t a, uint8_t v)
 {
     if(!vpu->vblank && !vpu->hsync) {
-        LOGV("core.vpu: write denied: vblank = 0");
+        LOGW("core.vpu: write denied: vblank = 0");
         return;
     }
 #ifdef _DEBUG_MEMORY
-    LOGD("core.vpu: wrote %02x @ $%04x", v, a);
+    LOGW("core.vpu: wrote %02x @ $%04x", v, a);
 #endif
     vpu->mem[a - 0xe000] = v;
 }

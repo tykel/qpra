@@ -1,6 +1,6 @@
 CC=gcc
-CFLAGS=-Og -g -std=c11 -I./src -DLOG_LEVEL=1 #-D_DEBUG_MEMORY -D_DEBUG
-#CFLAGS=-O3 -ffast-math -ftree-vectorize -std=c11 -I./src -DLOG_LEVEL=1 #-D_DEBUG_MEMORY -D_DEBUG
+#CFLAGS=-Og -g -std=c11 -I./src -DLOG_LEVEL=3 -D_DEBUG_MEMORY -D_DEBUG
+CFLAGS=-O3 -ffast-math -ftree-vectorize -std=c11 -I./src -DLOG_LEVEL=1 #-D_DEBUG_MEMORY -D_DEBUG
 CFLAGS+=$(shell pkg-config --cflags gtk+-3.0)
 CFLAGS+=$(shell sdl2-config --cflags)
 
@@ -34,7 +34,7 @@ LIBS+=$(shell sdl2-config --libs)
 
 .PHONY: all clean
 
-all: qpra test.kpr
+all: qpra #test.kpr
 
 qpra: $(MAIN_SRCS_OBJ) $(CORE_SRCS_OBJ) $(UI_SRCS_OBJ)
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)

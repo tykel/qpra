@@ -64,90 +64,17 @@ rr = ["a","b","c","d","e","f"]
 
 regs = { 'a':0, 'b':1, 'c':2, 'd':3, 'e':4, 'f':5, 'p':6, 's':7 }
 
-def getAddrMode(nops, op1, op2, ds, p):
-    #if op1 == "[t_h_isc]":
-    #    print 'getAddrMode: ', nops, ': ', op1, ', ', op2, ' -- ', ds
-    if nops == 0:
-        return 0
-    if nops == 1:
-        if re.match("[abcdef]", op1) is not None:
-            return 0
-        elif re.match("\[[abcdef]\]", op1) is not None:
-            return 1
-        elif re.match("(\$[abcdef0-9]{1,2}?)|(\d{1,3}?)", op1) is not None:
-            if num(op1) < 256:
-                return 2
-            else:
-                return 4
-        elif re.match("\w+", op1) is not None and op1 in ds:
-            if num(ds[op1]) < 256:
-                return 2
-            else:
-                return 4
-        elif re.match("\[(\$[abcdef0-9]{1,2}?)|(\d{1,3}?)\]", op1) is not None:
-            if -128 < (num(op1) - p) < 127:
-                return 3
-            else:
-                return 5
-        elif re.match("\[\w+\]", op1) is not None and op1[1:-1] in ds:
-            if -128 < (num(ds[op1[1:-1]]) - p) < 127:
-                return 3
-            else:
-                return 5
-        else:
-            print 'nops1 1 error: invalid operand: ', op1
-            return 0
-    elif nops == 2:
-        if re.match("[abcdef]", op1) is not None:
-            if re.match("[abcdef]", op2) is not None:
-                return 6
-            elif re.match("\[[abcdef]\]", op2) is not None:
-                return 7
-            elif re.match("(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)", op2) is not None:
-                if num(op2) < 256:
-                    return 9
-                else:
-                    return 11
-            elif re.match("\w+", op2) is not None and op2 in ds:
-                if num(ds[op2]) < 256:
-                    return 9
-                else:
-                    return 11
-            elif re.match("\[(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)\]", op2) is not None:
-                if num(op2) < 256:
-                    return 10
-                else:
-                    return 12
-            elif re.match("\[\w+\]", op2) is not None and op2[1:-1] in ds:
-                if num(ds[op2[1:-1]]) < 256:
-                    return 10
-                else:
-                    return 12
-            else:
-                print 'nops2 1 error: invalid operand: ', op2
-                return 0
-        elif re.match("\[[abcdef]\]", op1) is not None:
-            if re.match("[abcdef]", op2) is not None:
-                return 8
-            else:
-                print 'nop2 2 error: invalid operand: ', op2
-                return 0
-        elif re.match("[abcdef]", op2) is not None:
-            if re.match("\[(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)\]", op1) is not None:
-                if num(op1) < 256:
-                    return 13
-                else:
-                    return 14
-            elif re.match("\[\w+\]", op1) is not None and op1[1:-1] in ds:
-                if num(ds[op1[1:-1]]) < 256:
-                    return 13
-                else:
-                    return 14
-            else:
-                print 'nops 2 3 error: invalid operand: ', op1
-                return 0
 
-
+def isNum(s):
+    try:
+        if isinstance(s, (int, long)):
+            return True
+        v = re.findall("\$?(?:[0-9a-fA-F]+)", s)
+        if len(v) > 0 and v[0][0] == '$':
+            return True
+        return False
+    except ValueError:
+        return False
 
 def num(s):
     try:
@@ -162,6 +89,9 @@ def num(s):
         return float(s)
 
 
+class InvalidOperandException(Exception):
+    pass
+
 class instr:
     def __init__(self, strop, op, nops, op1="", op2="", addr=0):
         self.strop = strop
@@ -172,7 +102,7 @@ class instr:
         if nops > 1:
             self.op2 = op2
 
-        self.mode = getAddrMode(nops, op1, op2, defs, addr)
+        self.mode = self.addrMode()
 
         if strop in ["nop", "int", "rti", "rts"]:
             self.size = 1
@@ -184,6 +114,149 @@ class instr:
             self.size = 3
         else:
             self.size = 4
+
+    def addrMode(self):
+        if self.nops == 0:
+            return 0
+        elif self.nops == 1:
+            if self.op1 in rr:
+                return 0
+            elif self.op1[1:-1] in rr:
+                return 1
+            elif isNum(self.op1):
+                n = num(self.op1)
+                return 2 if -128 < n < 127 else 4
+            elif isNum(self.op1[1:-1]):
+                n = num(self.op1[1:-1])
+                return 3 if -128 < n < 127 else 5
+            else:
+                raise InvalidOperandException
+        elif self.nops == 2:
+            if self.op1 in rr:
+                if self.op2 in rr:
+                    return 6
+                elif self.op2[1:-1] in rr:
+                    return 7
+                elif isNum(self.op2):
+                    n = num(self.op2)
+                    return 9 if -128 < n < 127 else 11
+                elif isNum(self.op2[1:-1]):
+                    n = num(self.op2[1:-1])
+                    return 10 if -128 < n < 127 else 12
+                else:
+                    print opcodes.keys()[opcodes.values().index(self.op)],' ',self.op1,', ',self.op2
+                    raise InvalidOperandException
+            elif self.op1[1:-1] in rr:
+                if self.op2 in rr:
+                    return 8
+                else:
+                    raise InvalidOperandException
+            elif isNum(self.op1[1:-1]):
+                n = num(self.op[1:-1])
+                if not self.op2 in rr:
+                    raise InvalidOperandException
+                return 13 if -128 < n < 127 else 14
+            else:
+                raise InvalidOperandException
+        else:
+            raiseInvalidOperandException
+
+    def getAddrMode(self):
+        # Implicit mode, so don't care. Return 0 as placeholder.
+        if self.nops == 0:
+            return 0
+        if self.nops == 1:
+            # `i r0` : mode 0, direct reg.
+            if re.match("[abcdef]", op1) is not None:
+                return 0
+            # `i [r0]` : mode 1, indirect reg.
+            elif re.match("\[[abcdef]\]", op1) is not None:
+                return 1
+            # `i $xx` or `i xxx` : mode 2, direct byte or mode 4, direct word.
+            elif re.match("(\$[abcdef0-9]{1,2}?)|(\d{1,3}?)", op1) is not None:
+                if num(op1) < 256:
+                    return 2
+                else:
+                    return 4
+            # `i abcd` : mode 2, direct byte or mode 4, direct word.
+            elif re.match("\w+", op1) is not None and op1 in ds:
+                if num(ds[op1]) < 256:
+                    return 2
+                else:
+                    return 4
+            # `i [$xx]` or `i [xxx]` : mode 3, indirect byte offs. or mode 5, indirect word.
+            elif re.match("\[(\$[abcdef0-9]{1,2}?)|(\d{1,3}?)\]", op1) is not None:
+                if -124 < (num(op1) - p) < 123:
+                    return 3
+                else:
+                    return 5
+            # `i [abcd]` : mode 3, indirect byte offs. or mode 5, indirect word
+            elif re.match("\[\w+\]", op1) is not None and op1[1:-1] in ds:
+                if -124 < (num(ds[op1[1:-1]]) - p) < 123:
+                    return 3
+                else:
+                    return 5
+            else:
+                print 'nops1 1 error: invalid operand: ', op1
+                return 0
+        elif nops == 2:
+            if re.match("[abcdef]", op1) is not None:
+                # `i r0, r1` : mode 6, direct reg. / direct reg.
+                if re.match("[abcdef]", op2) is not None:
+                    return 6
+                # `i r0, [r1]` : mode 7, direct reg. / indirect reg.
+                elif re.match("\[[abcdef]\]", op2) is not None:
+                    return 7
+                # `i r0, $xx[xx]` or `i r0, xxx[xx]` : mode 9, direct reg. / direct byte or mode 11, direct reg. / direct word.
+                elif re.match("(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)", op2) is not None:
+                    if num(op2) < 256:
+                        return 9
+                    else:
+                        return 11
+                # `i r0, abcd` : mode 9, direct reg. / direct byte or mode 11, direct reg. / direct word.
+                elif re.match("\w+", op2) is not None and op2 in ds:
+                    if num(ds[op2]) < 256:
+                        return 9
+                    else:
+                        return 11
+                elif re.match("\[(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)\]", op2) is not None:
+                    # `i r0, [$xx]` or `i r0, [xxx]` : mode 10, direct reg. / indirect byte offs.
+                    if num(op2) < 256:
+                        return 10
+                    # `i r0, [$xxxx]` or `i r0, [xxxxx]` : mode 12, direct reg. / indirect word.
+                    else:
+                        return 12
+                elif re.match("\[\w+\]", op2) is not None and op2[1:-1] in ds:
+                    if num(ds[op2[1:-1]]) < 256:
+                        return 10
+                    else:
+                        return 12
+                else:
+                    print 'nops2 1 error: invalid operand: ', op2
+                    return 0
+            elif re.match("\[[abcdef]\]", op1) is not None:
+                # `i [r0], r1` : mode 8, indirect reg. / direct reg.
+                if re.match("[abcdef]", op2) is not None:
+                    return 8
+                else:
+                    print 'nop2 2 error: invalid operand: ', op2
+                    return 0
+            elif re.match("[abcdef]", op2) is not None:
+                # `i [$xx[xx]], r0` : mode 13, indirect byte offs. / direct reg. or mode 14, indirect word / direct reg.
+                if re.match("\[(\$[abcdef0-9]{1,4}?)|(\d{1,5}?)\]", op1) is not None:
+                    if num(op1) < 256:
+                        return 13
+                    else:
+                        return 14
+                # `i [abcd], r0` : mode 13, indirect byte offs. / direct reg. or mode 14, indirect word / direct reg.
+                elif re.match("\[\w+\]", op1) is not None and op1[1:-1] in ds:
+                    if num(ds[op1[1:-1]]) < 256:
+                        return 13
+                    else:
+                        return 14
+                else:
+                    print 'nops 2 3 error: invalid operand: ', op1
+                    return 0
 
     strop = ' '
     op = 0

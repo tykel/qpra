@@ -4,19 +4,20 @@
 
 init:       mv a, v_handler0    ; load the initial video IRQ handler address
             mv [$fffa], a       ; store it in the interrupt vector
-            ;mv a, t_handler     ; load the timer IRQ handler address
-            ;mv [$fffc], a
-            ;mv a, $03           ; enable HRC and set to HSync timing
-            ;mv [$ffe2], a
-            ;mv a, 0
-            ;mv [$8000], a
+            mv a, t_handler     ; load the timer IRQ handler address
+            mv [$fffc], a
+            mv a, $03           ; enable HRC and set to HSync timing
+            mv [$ffe2], a
+            mv a, 0
+            mv [$8000], a
+            mv [$8002], a
             mv c, 0
             mv d, 0
 
 loop:       jp loop             ; loop until the video IRQ
 
 .db $77,$77,$77,$77
-v_handler0: mv a, $80           ; set Enable bit and H-Double bit
+v_handler0: mv a, $84           ; set Enable bit and H-Double bit
             mv.b [$ea00], a     ; update sprite 0 reg.
             mv.b [$ea04], a     ; update sprite 1 reg.
             mv.b [$ea08], a     ; update sprite 2 reg.
@@ -28,11 +29,11 @@ v_handler0: mv a, $80           ; set Enable bit and H-Double bit
             mv.b [$ea0d], a     ; update sprite 3 reg.
             mv a, $88           ; set x and y sprite group offsets to 0
             mv.b [$ea02], a     ; update sprite 0 reg.
-            mv a, $98           ; set x and y sprite group offsets to 0
+            mv a, $a8           ; set x and y sprite group offsets to 0
             mv.b [$ea06], a     ; update sprite 1 reg.
             mv a, $89           ; set x and y sprite group offsets to 0
             mv.b [$ea0a], a     ; update sprite 2 reg.
-            mv a, $99           ; set x and y sprite group offsets to 0
+            mv a, $a9           ; set x and y sprite group offsets to 0
             mv.b [$ea0e], a     ; update sprite 3 reg.
             mv a, $01           ; tile index 1
             mv.b [$ea03], a     ; update sprite 0 reg.
@@ -43,9 +44,10 @@ v_handler0: mv a, $80           ; set Enable bit and H-Double bit
             mv a, $04           ; tile index 4
             mv.b [$ea0f], a     ; update sprite 3 reg.
             
-            mv a, 0             ; use palette 0
-            mv [$eb40], a       ; update layer 1/2 palette reg.
-            mv [$eb81], a       ; update sprite palette reg.
+            mv a, $10           ; use palette 0 (L1) and 1 (L2)
+            mv.b [$eb80], a     ; update layer 1/2 palette reg.
+            mv a, $00
+            mv.b [$eb81], a     ; update sprite palette reg.
             mv a, $7020         ; y = 96
             mv [$eb00], a       ; update group 0 pos.
             mv a, $00           ; black
@@ -62,6 +64,8 @@ v_handler0: mv a, $80           ; set Enable bit and H-Double bit
             mv.b [$e90e], a     ; update palette 0, entry e
             mv a, $dd           ; white
             mv.b [$e90f], a     ; update palette 0, entry f
+            mv a, 2             ; scroll 1px
+            mv.b [$eb89], a     ; update layer 2 v-scroll
             mv a, v_handler1    ; load the "real" video IRQ handler address
             mv [$fffa], a       ; store it in the interrupt vector
             rti
@@ -103,6 +107,7 @@ v_handler1: inc c
             mv d, c
             add d, sin_lut
             mv.b d, [d]
+            mv b, d
             add d, 24 
             mv e, c
             add e, 64
@@ -114,6 +119,16 @@ v_handler1: inc c
             or d, e
             lsl d, 1
 zzzz:       mv [$eb00], d       ; update group 0 pos.
+            ;mv.b a, [$8002]
+            ;inc a
+            ;mv.b [$8002], a
+            ;lsr a, 4
+            ;mv.b [$eb83], a
+            xor d, d
+            sub d, b
+            and d, 7
+            sub d, 4
+            mv.b [$eb83], d
             rti
 
 ;------------------------------------------------------------------------------
@@ -187,14 +202,14 @@ sin_lut:
 .bank tile_swap 0
 
 ; 0 Background tile
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $0e,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$0e,
-.db $00,$00,$00,$00,
-.db $00,$00,$00,$00,
-.db $00,$e0,$00,$00,
+.db $0e,$00,$e0,$00,
+.db $0e,$00,$e0,$00,
+.db $0e,$00,$e0,$00,
+.db $0e,$00,$e0,$00,
+.db $ee,$ee,$ee,$ee,
+.db $0e,$00,$e0,$00,
+.db $0e,$00,$e0,$00,
+.db $0e,$00,$e0,$00,
 
 ; Player tiles
 ; 1 Top left

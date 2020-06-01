@@ -86,7 +86,13 @@ void *core_entry(void *data)
         LOGV("core.cpu: %04x: %s (%d cycles) (p now %04x)",
              pc, instrnam[INSTR_OP(core->cpu->i)], core->cpu->i_cycles, core->cpu->r[R_P]);
 #ifdef _DEBUG
-        getc(stdin);
+        {
+           int v = getc(stdin);
+           if (v == 'v') {
+              LOGV("core.cpu: skipping to vblank");
+              core->cpu->total_cycles = core_vpu_debug_skip_to_vblank(core->vpu, core->cpu->total_cycles);
+           }
+        }
 #else
         
         /* One frame's worth of cycles have been executed, so time to pause. */
@@ -107,7 +113,6 @@ void *core_entry(void *data)
             if(us < 16666) {
                 ts_sleep.tv_sec = 0;
                 ts_sleep.tv_nsec = 16666666 - (us * 1000);
-                LOGV("sleeping %d ns", ts_sleep.tv_nsec);
                 nanosleep(&ts_sleep, NULL);
             }
             

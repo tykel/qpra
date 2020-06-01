@@ -7,7 +7,7 @@ init:       mv a, v_handler0    ; load the initial video IRQ handler address
 
 loop:       jp loop             ; loop until the video IRQ
 
-v_handler0: mv a, $85           ; set Enable bit and H-Double bit
+v_handler0: mv a, $84           ; set Enable bit and H-Double bit
             mv.b [$ea00], a     ; update sprite 0 reg.
             mv a, $88           ; set x and y sprite group offsets to 0
             mv.b [$ea02], a     ; update sprite 0 reg.
@@ -25,12 +25,21 @@ v_handler0: mv a, $85           ; set Enable bit and H-Double bit
             rti
 
 v_handler1: mv [$eb00], c       ; update group 0 pos.
-            inc c               ; increment group x position
+            ;inc c               ; increment group x position
             ;lsl c, 8
             ;inc c
             rti
 
 .bank tile_swap 0
+
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$00,
+.db $00,$00,$00,$00,
 
 .db $10,$00,$00,$01,
 .db $01,$00,$00,$10,

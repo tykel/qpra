@@ -107,7 +107,7 @@ int core_cpu_init(struct core_cpu **pcpu, struct core_mmu *mmu)
     core_cpu_ops[0x1c] = core_cpu_i_op_asr;
     core_cpu_ops[0x1d] = core_cpu_i_op_and;
     core_cpu_ops[0x1e] = core_cpu_i_op_or;
-    core_cpu_ops[0x1f] = core_cpu_i_op_not;
+    core_cpu_ops[0x1f] = core_cpu_i_op_xor;
 
     cpu->hrc = malloc(sizeof(struct core_hrc));
     if(cpu->hrc == NULL) {
@@ -175,15 +175,15 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
             *c += 1;
 
         } else if(*c == 3) {
+            const char *ints[] = {
+               "None!", "User", "Timer", "Video", "Audio",
+            };
             cpu->r[R_P] = core_mmu_rw_fetch_cpu(cpu->mmu);
+            LOGV("%s IRQ fired: next p @ $%04x",
+                  ints[cpu->interrupt], cpu->r[R_P]); 
             cpu->interrupt = INT_NONE;
             *c = 0;
             cpu->i_middle = 0;
-            LOGD("Video IRQ fired: next p @ $%04x", cpu->r[R_P]); 
-            if (cpu->r[R_P] == 0x0108) {
-                cpu->i_middle = 0;
-                return;
-            }
         }
         return;
     }
@@ -206,7 +206,9 @@ void core_cpu_i_cycle(struct core_cpu *cpu)
         cpu->i->ib0 = B_LO(t);
         cpu->i->ib1 = B_HI(t);
         i = core_cpu_ops[INSTR_OP(cpu->i)];
-        //LOGW("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
+#ifdef _DEBUG
+        LOGD("core.cpu: op = %02x %02x", cpu->i->ib0, cpu->i->ib1);
+#endif
         
         /* Nothing else to fetch. */
         if(instr_is_void(cpu->i)) {
@@ -434,7 +436,6 @@ void core_cpu_i_instr(struct core_cpu *cpu)
 void core_cpu_i_op_nop(struct core_cpu *cpu, struct core_instr_params *p)
 {
     /* Literally a no-op... */
-    LOGD("nop");
 }
 
 /*

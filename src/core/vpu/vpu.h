@@ -161,5 +161,7 @@ void core_vpu_writeb(struct core_vpu *, uint16_t, uint8_t);
 uint16_t core_vpu_readw(struct core_vpu *, uint16_t);
 void core_vpu_writew(struct core_vpu *, uint16_t, uint16_t);
 
+int core_vpu_debug_skip_to_vblank(struct core_vpu *vpu, int total_cycles);
+
 #endif
 
