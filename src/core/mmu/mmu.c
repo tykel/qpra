@@ -13,6 +13,7 @@
 #include "core/cpu/cpu.h"
 #include "core/cpu/hrc.h"
 #include "core/vpu/vpu.h"
+#include "core/cart/cart.h"
 #include "log.h"
 
 /* Static memory banks. */
@@ -22,7 +23,6 @@ static uint8_t *ram_f;
 static uint8_t **ram_s;
 static uint8_t **tile_s;
 static uint8_t **dpcm_s;
-static uint8_t *cart_f;
 static uint8_t *fixed0_f;
 static uint8_t *fixed1_f;
 
@@ -59,12 +59,6 @@ int core_mmu_init(struct core_mmu **pmmu, struct core_mmu_params *params,
 
     ram_f = banks->ram_f ? banks->ram_f : calloc(8*1024, sizeof(uint8_t));
     mmu->ram_f = ram_f;
-
-    /* Allocate the cart permanent storage. */
-    cart_f = calloc(256, sizeof(uint8_t));
-    if(cart_f == NULL)
-        goto l_malloc_error;
-    mmu->cart_f = cart_f;
 
     /* Allocate the two banks for misc. use at address space end. */
     fixed0_f = calloc(6*256, sizeof(uint8_t));
@@ -186,6 +180,17 @@ int core_mmu_vpu(struct core_mmu *mmu, struct core_vpu *vpu)
     return 1;
 }
 
+/* Similar rationale to the above, except for the cart state. */
+int core_mmu_cart(struct core_mmu *mmu, struct core_cart *cart)
+{
+   if(cart == NULL) {
+       LOGE("Attempted to set null cart for mmu");
+       return 0;
+   }
+
+   mmu->cart = cart;
+   return 1;
+}
 
 /* 
  * Destroy the MMU state.
@@ -199,8 +204,6 @@ int core_mmu_destroy(struct core_mmu *mmu)
     mmu->rom_f = rom_f = NULL;
     free(ram_f);
     mmu->ram_f = ram_f = NULL;
-    free(cart_f);
-    mmu->cart_f = cart_f = NULL;
     free(fixed0_f);
     mmu->fixed0_f = fixed0_f = NULL;
     free(fixed1_f);
@@ -442,7 +445,7 @@ static uint8_t core_mmu_readb(struct core_mmu *mmu, uint16_t a)
     else if(a <= A_DPCM_SWAP_END)
         return mmu->dpcm_s[a - A_DPCM_SWAP];
     else if(a <= A_CART_FIXED_END)
-        return mmu->cart_f[a - A_CART_FIXED];
+        return core_cart_readb(mmu->cart, a);
     else if(a == A_ROM_BANK_SELECT)
         return mmu->rom_s_bank;
     else if(a == A_RAM_BANK_SELECT)
@@ -496,7 +499,7 @@ static void core_mmu_writeb(struct core_mmu *mmu, uint16_t a, uint8_t v)
     else if(a <= A_FIXED0_END)
         LOGW("core.mmu: write @ address $%04x: unhandled", a);
     else if(a <= A_CART_FIXED_END)
-        mmu->cart_f[a - A_CART_FIXED] = v;
+        core_cart_writeb(mmu->cart, a, v);
     else if(a <= A_FIXED1_END)
         LOGW("core.mmu: write @ address $%04x: unhandled (p:$%04x)", a, mmu->cpu->r[R_P]);
     else if(a == A_ROM_BANK_SELECT)

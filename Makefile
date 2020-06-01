@@ -15,8 +15,8 @@ MAIN_SRCS:=$(addprefix $(SRC)/,$(MAIN_SRCS))
 MAIN_SRCS_OBJ:=$(MAIN_SRCS:.c=.o)
 MAIN_SRCS_ALL:=$(addprefix $(SRC)/,$(MAIN_SRCS_ALL))
 
-CORE_SRCS:=core.c cpu/cpu.c cpu/hrc.c mmu/mmu.c vpu/vpu.c
-CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h cpu/hrc.h mmu/mmu.h vpu/vpu.h
+CORE_SRCS:=core.c cpu/cpu.c cpu/hrc.c mmu/mmu.c vpu/vpu.c cart/cart.c
+CORE_SRCS_ALL:=$(CORE_SRCS) core.h cpu/cpu.h cpu/hrc.h mmu/mmu.h vpu/vpu.h cart/cart.h
 
 CORE_SRCS:=$(addprefix $(SRC)/$(CORE)/,$(CORE_SRCS))
 CORE_SRCS_OBJ:=$(CORE_SRCS:.c=.o)

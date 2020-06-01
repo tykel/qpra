@@ -77,6 +77,7 @@ struct core_mmu
 {
     struct core_cpu *cpu;
     struct core_vpu *vpu;
+    struct core_cart *cart;
 
     /* The memory banks. */
     uint8_t *rom_f;
@@ -125,6 +126,7 @@ int core_mmu_init(struct core_mmu **, struct core_mmu_params *,
         struct core_temp_banks *);
 int core_mmu_cpu(struct core_mmu *, struct core_cpu *);
 int core_mmu_vpu(struct core_mmu *, struct core_vpu *);
+int core_mmu_cart(struct core_mmu *, struct core_cart *);
 int core_mmu_destroy(struct core_mmu *);
 
 int core_mmu_bank_select(struct core_mmu *, enum core_mmu_bank, uint8_t);
@@ -144,6 +146,10 @@ int core_mmu_rb_send_vpu(struct core_mmu *, uint16_t);
 uint8_t core_mmu_rb_fetch_vpu(struct core_mmu *);
 int core_mmu_wb_send_vpu(struct core_mmu *, uint16_t, uint8_t);
 
+int core_mmu_rb_send_cart(struct core_mmu *, uint16_t);
+uint8_t core_mmu_rb_fetch_cart(struct core_mmu *);
+int core_mmu_wb_send_cart(struct core_mmu *, uint16_t, uint8_t);
+
 int core_mmu_rw_send_cpu(struct core_mmu *, uint16_t);
 uint16_t core_mmu_rw_fetch_cpu(struct core_mmu *);
 int core_mmu_ww_send_cpu(struct core_mmu *, uint16_t, uint16_t);
@@ -151,6 +157,10 @@ int core_mmu_ww_send_cpu(struct core_mmu *, uint16_t, uint16_t);
 int core_mmu_rw_send_vpu(struct core_mmu *, uint16_t);
 uint16_t core_mmu_rw_fetch_vpu(struct core_mmu *);
 int core_mmu_ww_send_vpu(struct core_mmu *, uint16_t, uint16_t);
+
+int core_mmu_rw_send_cart(struct core_mmu *, uint16_t);
+uint16_t core_mmu_rw_fetch_cart(struct core_mmu *);
+int core_mmu_ww_send_cart(struct core_mmu *, uint16_t, uint16_t);
 
 void core_mmu_update(struct core_mmu *);
 

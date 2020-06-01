@@ -16,7 +16,7 @@
 //#include "core/apu/apu.h"
 #include "core/vpu/vpu.h"
 #include "core/mmu/mmu.h"
-//#include "core/cart/cart.h"
+#include "core/cart/cart.h"
 //#include "core/pad/pad.h"
 #include "log.h"
 
@@ -158,7 +158,8 @@ int core_init(struct core_system *core, struct core_temp_banks *banks)
     if(!core_vpu_init_palette(core->vpu, palette))
         return 0;
     //core_apu_init(core->apu);
-    //core_cart_init(core->cart);
+    if(!core_cart_init(&core->cart, core->cpu))
+       return 0;
     //core_pad_init(core->pad);
     
     LOGD("Core initialized");
@@ -167,6 +168,7 @@ int core_init(struct core_system *core, struct core_temp_banks *banks)
 
 int core_destroy(struct core_system *core)
 {
+    core_cart_destroy(core->cart);
     core_vpu_destroy(core->vpu);
     core_mmu_destroy(core->mmu);
     core_cpu_destroy(core->cpu);
